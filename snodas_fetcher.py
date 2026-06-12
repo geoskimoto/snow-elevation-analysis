@@ -98,12 +98,22 @@ def download_and_extract(date: datetime, tif_path: Path) -> None:
 
     try:
         with tarfile.open(tmp_tar) as tar:
-            member = tar.getmember(dat_gz_name)
+            try:
+                member = tar.getmember(dat_gz_name)
+            except KeyError:
+                raise RuntimeError(
+                    f"Expected SWE file '{dat_gz_name}' not found in SNODAS archive "
+                    f"for {date.date()}. The SNODAS filename format may have changed."
+                )
             with tar.extractfile(member) as gz_file, open(tmp_dat_gz, "wb") as out:
                 out.write(gz_file.read())
         with gzip.open(tmp_dat_gz, "rb") as gz, open(tmp_dat, "wb") as out:
             shutil.copyfileobj(gz, out)
         dat_to_geotiff(tmp_dat, tif_path)
+    except Exception:
+        if tif_path.exists():
+            tif_path.unlink()
+        raise
     finally:
         for p in [tmp_tar, tmp_dat_gz, tmp_dat]:
             if p.exists():
