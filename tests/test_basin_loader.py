@@ -44,3 +44,9 @@ def test_load_huc2_raises_if_file_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(basin_loader, 'BASEMAP_DIR', tmp_path)
     with pytest.raises(FileNotFoundError, match="huc2_pnw.geojson"):
         basin_loader.load_huc2()
+
+
+def test_load_huc4_raises_if_file_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(basin_loader, 'BASEMAP_DIR', tmp_path)
+    with pytest.raises(FileNotFoundError, match="huc4_pnw.geojson"):
+        basin_loader.load_huc4()
