@@ -1,3 +1,4 @@
+import secrets
 from datetime import timedelta
 
 import diskcache
@@ -35,6 +36,7 @@ _LOGIN_HTML = """<!DOCTYPE html>
     <h2>Snow Elevation Analysis</h2>
     {% if error %}<p class="error">{{ error }}</p>{% endif %}
     <form method="POST" action="/login">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label for="password">Password</label>
       <input type="password" name="password" id="password" autofocus autocomplete="current-password">
       <button type="submit">Sign in</button>
@@ -63,16 +65,26 @@ def create_server() -> Flask:
 
     @server.route('/login', methods=['GET'])
     def login_get():
-        return render_template_string(_LOGIN_HTML, error=None)
+        token = secrets.token_hex(32)
+        session['csrf_token'] = token
+        return render_template_string(_LOGIN_HTML, error=None, csrf_token=token)
 
     @server.route('/login', methods=['POST'])
     @limiter.limit('5 per 15 minutes')
     def login_post():
+        submitted = request.form.get('csrf_token', '')
+        expected = session.pop('csrf_token', None)
+        if not expected or not secrets.compare_digest(submitted, expected):
+            return render_template_string(
+                _LOGIN_HTML, error='Invalid request.', csrf_token=secrets.token_hex(32)
+            ), 400
         pw = request.form.get('password', '')
         if auth.check_password(pw, config.get_password_hash()):
             auth.set_authenticated(True)
             return redirect('/')
-        return render_template_string(_LOGIN_HTML, error='Invalid password'), 401
+        token = secrets.token_hex(32)
+        session['csrf_token'] = token
+        return render_template_string(_LOGIN_HTML, error='Invalid password', csrf_token=token), 401
 
     @server.route('/logout')
     def logout():
