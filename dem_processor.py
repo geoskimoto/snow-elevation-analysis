@@ -58,6 +58,7 @@ def build_aligned_dem(swe_tif: Path, dem_cache: Path) -> None:
             bounds=_COLUMBIA_BASIN_BOUNDS,
             output=str(tmp_raw),
             product="SRTM3",
+            max_download_tiles=20,
         )
         warp_dem_to_grid(tmp_raw, swe_tif, tmp_warped)
         tmp_warped.rename(dem_cache)
