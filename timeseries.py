@@ -52,7 +52,7 @@ def water_year(date: datetime) -> int:
     return date.year
 
 
-def append_volumes(date: datetime, bands_by_basin: dict, cache_dir: Path) -> None:
+def append_volumes(date: datetime, bands_by_basin: dict[str, pd.DataFrame], cache_dir: Path) -> None:
     """Sum ``total_swe_volume_km3`` per basin and append one row per basin.
 
     Parameters
@@ -76,12 +76,14 @@ def append_volumes(date: datetime, bands_by_basin: dict, cache_dir: Path) -> Non
     wy = water_year(date)
     path = _parquet_path(wy, cache_dir)
 
+    # Ensure parent directory exists
+    path.parent.mkdir(parents=True, exist_ok=True)
+
     # Load existing data (or start fresh)
     if path.exists():
         existing = pd.read_parquet(path)
     else:
         existing = _empty_df()
-        path.parent.mkdir(parents=True, exist_ok=True)
 
     ts = pd.Timestamp(date)
 
@@ -105,6 +107,7 @@ def append_volumes(date: datetime, bands_by_basin: dict, cache_dir: Path) -> Non
     if not new_rows:
         return  # Nothing to write
 
+    # NOTE: full read-modify-write per call; acceptable for daily frequency but not bulk ingestion
     new_df = pd.DataFrame(new_rows)
     combined = pd.concat([existing, new_df], ignore_index=True)
     combined['date'] = pd.to_datetime(combined['date'])

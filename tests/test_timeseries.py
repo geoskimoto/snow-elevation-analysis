@@ -80,7 +80,7 @@ class TestLoadTimeseriesMissingFile:
     def test_date_column_dtype_is_datetime(self, tmp_path):
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
         # Empty frame still needs the declared dtype
-        assert df.dtypes['date'] == 'datetime64[ns]' or len(df) == 0
+        assert df.dtypes['date'] == 'datetime64[ns]'
 
     def test_missing_wy_file_does_not_create_file(self, tmp_path):
         timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
