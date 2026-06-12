@@ -1,0 +1,108 @@
+from datetime import datetime
+from pathlib import Path
+
+import pandas as pd
+import plotly.graph_objects as go
+
+import config
+from basin_loader import load_huc2, load_huc4
+from charts import make_huc2_figure, make_huc4_figure
+from dem_processor import get_aligned_dem
+from elevation_bands import compute_bands
+from plotter import plot_hypsometric
+from snodas_fetcher import fetch_swe
+
+_HUC2_KEY = 'Columbia River Basin'
+
+
+def _cache_path(date_key: str, cache_dir: Path) -> Path:
+    return cache_dir / 'bands' / f'{date_key}_250m.parquet'
+
+
+def save_band_cache(bands_by_basin: dict, date_key: str, cache_dir: Path) -> None:
+    path = _cache_path(date_key, cache_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frames = []
+    for name, df in bands_by_basin.items():
+        row = df.copy()
+        row.insert(0, 'basin', name)
+        frames.append(row)
+    pd.concat(frames).to_parquet(path, index=False)
+
+
+def load_band_cache(date_key: str, cache_dir: Path) -> dict | None:
+    path = _cache_path(date_key, cache_dir)
+    if not path.exists():
+        return None
+    df = pd.read_parquet(path)
+    return {
+        name: group.drop(columns='basin').reset_index(drop=True)
+        for name, group in df.groupby('basin')
+    }
+
+
+def run_pipeline(date_str: str, set_progress=None) -> dict:
+    """Run full pipeline. Returns dict with huc2_fig, huc4_fig, huc2_png, huc4_png, error."""
+
+    def _progress(step: int, total: int, msg: str) -> None:
+        if set_progress:
+            set_progress((int(step / total * 100), msg))
+
+    try:
+        date = datetime.strptime(date_str, '%Y-%m-%d')
+        date_key = date.strftime('%Y%m%d')
+        cache_dir = config.get_cache_dir()
+        output_dir = config.get_output_dir()
+
+        _progress(1, 5, 'Fetching SNODAS data...')
+        swe_tif = fetch_swe(date, cache_dir=cache_dir)
+
+        _progress(2, 5, 'Loading basin boundaries...')
+        huc2 = load_huc2()
+        huc4 = load_huc4()
+
+        _progress(3, 5, 'Building/loading DEM...')
+        dem_tif = get_aligned_dem(swe_tif, cache_dir=cache_dir / 'dem')
+
+        _progress(4, 5, 'Computing elevation bands...')
+        cached = load_band_cache(date_key, cache_dir)
+        if cached is None:
+            bands_by_basin: dict = {
+                _HUC2_KEY: compute_bands(swe_tif, dem_tif, huc2.geometry[0])
+            }
+            for _, row in huc4.iterrows():
+                bands_by_basin[row['name']] = compute_bands(
+                    swe_tif, dem_tif, row.geometry
+                )
+            save_band_cache(bands_by_basin, date_key, cache_dir)
+        else:
+            bands_by_basin = cached
+
+        _progress(5, 5, 'Rendering figures...')
+        written = plot_hypsometric(bands_by_basin, date, output_dir)
+        png_by_stem = {p.stem: p for p in written}
+
+        huc4_bands = {k: v for k, v in bands_by_basin.items() if k != _HUC2_KEY}
+        huc2_fig = (
+            make_huc2_figure(bands_by_basin[_HUC2_KEY], date)
+            if _HUC2_KEY in bands_by_basin
+            else go.Figure()
+        )
+        huc4_fig = make_huc4_figure(huc4_bands, date)
+
+        return {
+            'huc2_fig': huc2_fig,
+            'huc4_fig': huc4_fig,
+            'huc2_png': str(png_by_stem.get(f'snow_hypsometric_huc2_{date_key}', '')),
+            'huc4_png': str(png_by_stem.get(f'snow_hypsometric_huc4_{date_key}', '')),
+            'error': None,
+        }
+
+    except Exception as exc:
+        return {
+            'huc2_fig': go.Figure(),
+            'huc4_fig': go.Figure(),
+            'huc2_png': '',
+            'huc4_png': '',
+            'error': str(exc),
+        }
