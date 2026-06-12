@@ -77,7 +77,7 @@ def create_server() -> Flask:
 
     @server.before_request
     def require_login():
-        if request.path == '/login':
+        if request.path in ('/login', '/logout'):
             return
         if not auth.is_authenticated():
             return redirect('/login')
