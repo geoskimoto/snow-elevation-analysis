@@ -14,6 +14,7 @@ Exit codes
 1   An error occurred (FTP failure, missing DEM, etc.).
 """
 
+import argparse
 import logging
 import sys
 from datetime import datetime
@@ -74,8 +75,22 @@ def _setup_logging() -> logging.Logger:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description='Process SWE data for a given date (default: today).'
+    )
+    parser.add_argument(
+        '--date',
+        type=lambda s: datetime.strptime(s, '%Y-%m-%d'),
+        default=None,
+        help='Date to process in YYYY-MM-DD format (default: today).'
+    )
+    args = parser.parse_args()
+
     logger = _setup_logging()
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    if args.date:
+        today = args.date.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     date_key = today.strftime('%Y%m%d')
 
     cache_dir = config.get_cache_dir()
@@ -83,6 +98,11 @@ def main() -> None:
 
     logger.info('=== update_timeseries %s ===', today.date())
     logger.info('cache_dir: %s', cache_dir)
+
+    # Load basin boundaries early (outside try block) so missing files fail loudly
+    logger.info('Loading basin boundaries ...')
+    huc2 = load_huc2()
+    huc4 = load_huc4()
 
     # Idempotency: exit cleanly if band cache already present
     cached = load_band_cache(date_key, cache_dir)
@@ -101,10 +121,6 @@ def main() -> None:
 
         logger.info('Loading aligned DEM ...')
         dem_tif = get_aligned_dem(swe_tif, dem_cache=dem_cache)
-
-        logger.info('Loading basin boundaries ...')
-        huc2 = load_huc2()
-        huc4 = load_huc4()
 
         logger.info('Computing elevation bands ...')
         bands_by_basin: dict = {
