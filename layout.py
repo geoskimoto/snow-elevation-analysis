@@ -64,7 +64,7 @@ def get_layout() -> html.Div:
                         },
                     ),
                 ], id='download-section', style={'display': 'none'}),
-            ], style={
+            ], className='sidebar', style={
                 'width': '230px', 'padding': '1.2rem', 'background': 'white',
                 'boxShadow': '1px 0 4px rgba(0,0,0,0.06)', 'flexShrink': '0',
                 'overflowY': 'auto',
@@ -76,13 +76,19 @@ def get_layout() -> html.Div:
                     dcc.Tab(label='Snowpack', value='snowpack', children=[
                         html.Div([
                             html.Div([
-                                dcc.Graph(id='huc2-graph', style={'flex': '1', 'minWidth': '0'}),
-                                dcc.Graph(id='huc4-graph', style={'flex': '1', 'minWidth': '0'}),
-                            ], style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
+                                dcc.Graph(id='huc2-graph', style={'flex': '1', 'minWidth': '0'},
+                                          responsive=True, config={'displayModeBar': False}),
+                                dcc.Graph(id='huc4-graph', style={'flex': '1', 'minWidth': '0'},
+                                          responsive=True, config={'displayModeBar': False}),
+                            ], className='chart-pair',
+                               style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
                             html.Div([
-                                dcc.Graph(id='huc2-volume-graph', style={'flex': '1', 'minWidth': '0'}),
-                                dcc.Graph(id='huc4-volume-graph', style={'flex': '1', 'minWidth': '0'}),
-                            ], style={'display': 'flex', 'gap': '1rem'}),
+                                dcc.Graph(id='huc2-volume-graph', style={'flex': '1', 'minWidth': '0'},
+                                          responsive=True, config={'displayModeBar': False}),
+                                dcc.Graph(id='huc4-volume-graph', style={'flex': '1', 'minWidth': '0'},
+                                          responsive=True, config={'displayModeBar': False}),
+                            ], className='chart-pair',
+                               style={'display': 'flex', 'gap': '1rem'}),
                         ], style={'padding': '1rem'}),
                     ]),
                     dcc.Tab(label='Trends', value='trends', children=[
@@ -92,16 +98,18 @@ def get_layout() -> html.Div:
                                 style={'fontSize': '0.85rem', 'color': '#555',
                                        'margin': '0 0 0.75rem 0'},
                             ),
-                            dcc.Graph(id='basin-timeseries-graph',
-                                      style={'height': '45vh'}),
-                            dcc.Graph(id='huc4-timeseries-graph',
-                                      style={'height': '45vh'}),
+                            dcc.Graph(id='basin-timeseries-graph', className='timeseries-graph',
+                                      style={'height': '45vh'}, responsive=True,
+                                      config={'displayModeBar': False}),
+                            dcc.Graph(id='huc4-timeseries-graph', className='timeseries-graph',
+                                      style={'height': '45vh'}, responsive=True,
+                                      config={'displayModeBar': False}),
                         ], style={'padding': '1rem'}),
                     ]),
                 ]),
-            ], style={'flex': '1', 'padding': '1.2rem', 'overflowY': 'auto'}),
+            ], className='chart-area', style={'flex': '1', 'padding': '1.2rem', 'overflowY': 'auto'}),
 
-        ], style={'display': 'flex', 'flex': '1', 'overflow': 'hidden'}),
+        ], className='body-row', style={'display': 'flex', 'flex': '1', 'overflow': 'hidden'}),
 
     ], style={
         'display': 'flex', 'flexDirection': 'column',

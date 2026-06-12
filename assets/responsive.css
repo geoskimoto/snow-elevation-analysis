@@ -1,0 +1,46 @@
+/* ── Mobile-first responsive overrides ── */
+
+@media (max-width: 768px) {
+
+    /* Stack sidebar above charts */
+    .body-row {
+        flex-direction: column !important;
+        overflow: visible !important;
+    }
+
+    /* Sidebar goes full width across the top */
+    .sidebar {
+        width: 100% !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+        padding: 1rem !important;
+    }
+
+    /* Chart area scrolls normally */
+    .chart-area {
+        overflow-y: visible !important;
+        padding: 0.5rem !important;
+    }
+
+    /* Side-by-side chart pairs stack vertically */
+    .chart-pair {
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+    }
+
+    /* Each snowpack chart gets a fixed height on mobile */
+    .chart-pair > div {
+        height: 320px !important;
+        min-height: 320px !important;
+    }
+
+    /* Timeseries charts: shorter on mobile so both fit without excessive scroll */
+    .timeseries-graph {
+        height: 300px !important;
+    }
+
+    /* Reduce tab label font size so they don't overflow */
+    .dash-tab {
+        font-size: 0.85rem !important;
+        padding: 6px 10px !important;
+    }
+}
