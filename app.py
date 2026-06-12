@@ -1,11 +1,15 @@
 from datetime import timedelta
 
+import diskcache
+from dash import Dash, DiskcacheManager
 from flask import Flask, request, redirect, session, render_template_string
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 import auth
+import callbacks
 import config
+import layout
 
 _LOGIN_HTML = """<!DOCTYPE html>
 <html>
@@ -83,3 +87,31 @@ def create_server() -> Flask:
             return redirect('/login')
 
     return server
+
+
+def create_app() -> Dash:
+    server = create_server()
+    cache_dir = config.get_cache_dir() / 'diskcache'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    dc = diskcache.Cache(str(cache_dir))
+    manager = DiskcacheManager(dc)
+
+    app = Dash(
+        __name__,
+        server=server,
+        background_callback_manager=manager,
+        suppress_callback_exceptions=True,
+    )
+    app.layout = layout.get_layout()
+    callbacks.register(app)
+
+    return app
+
+
+try:
+    app = create_app()
+    server = app.server
+except RuntimeError:
+    # env vars not set; app will be created explicitly when needed
+    app = None
+    server = None
