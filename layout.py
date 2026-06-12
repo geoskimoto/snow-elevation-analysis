@@ -13,8 +13,6 @@ def get_layout() -> html.Div:
         html.Div([
             html.H2('Snow Elevation Analysis',
                     style={'margin': '0', 'color': '#333', 'fontSize': '1.2rem'}),
-            html.A('Logout', href='/logout',
-                   style={'fontSize': '0.85rem', 'color': '#666', 'textDecoration': 'none'}),
         ], style={
             'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center',
             'padding': '0.8rem 1.5rem', 'background': 'white',
@@ -72,12 +70,35 @@ def get_layout() -> html.Div:
                 'overflowY': 'auto',
             }),
 
-            # Chart area
+            # Chart area — tabbed
             html.Div([
-                html.Div([
-                    dcc.Graph(id='huc2-graph', style={'flex': '1', 'minWidth': '0'}),
-                    dcc.Graph(id='huc4-graph', style={'flex': '1', 'minWidth': '0'}),
-                ], style={'display': 'flex', 'gap': '1rem', 'height': '100%'}),
+                dcc.Tabs(id='main-tabs', value='snowpack', children=[
+                    dcc.Tab(label='Snowpack', value='snowpack', children=[
+                        html.Div([
+                            html.Div([
+                                dcc.Graph(id='huc2-graph', style={'flex': '1', 'minWidth': '0'}),
+                                dcc.Graph(id='huc4-graph', style={'flex': '1', 'minWidth': '0'}),
+                            ], style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
+                            html.Div([
+                                dcc.Graph(id='huc2-volume-graph', style={'flex': '1', 'minWidth': '0'}),
+                                dcc.Graph(id='huc4-volume-graph', style={'flex': '1', 'minWidth': '0'}),
+                            ], style={'display': 'flex', 'gap': '1rem'}),
+                        ], style={'padding': '1rem'}),
+                    ]),
+                    dcc.Tab(label='Trends', value='trends', children=[
+                        html.Div([
+                            html.P(
+                                'Showing current water year data',
+                                style={'fontSize': '0.85rem', 'color': '#555',
+                                       'margin': '0 0 0.75rem 0'},
+                            ),
+                            dcc.Graph(id='basin-timeseries-graph',
+                                      style={'height': '45vh'}),
+                            dcc.Graph(id='huc4-timeseries-graph',
+                                      style={'height': '45vh'}),
+                        ], style={'padding': '1rem'}),
+                    ]),
+                ]),
             ], style={'flex': '1', 'padding': '1.2rem', 'overflowY': 'auto'}),
 
         ], style={'display': 'flex', 'flex': '1', 'overflow': 'hidden'}),
