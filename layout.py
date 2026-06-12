@@ -8,6 +8,7 @@ def get_layout() -> html.Div:
     return html.Div([
         dcc.Store(id='result-store'),
         dcc.Download(id='download-data'),
+        dcc.Download(id='download-html'),
 
         # Header bar
         html.Div([
@@ -61,6 +62,15 @@ def get_layout() -> html.Div:
                             'display': 'block', 'width': '100%', 'padding': '0.5rem',
                             'background': '#009E73', 'color': 'white', 'border': 'none',
                             'borderRadius': '4px', 'cursor': 'pointer', 'fontSize': '0.9rem',
+                            'marginBottom': '0.5rem',
+                        },
+                    ),
+                    html.Button(
+                        'Download HTML', id='download-html-btn', n_clicks=0,
+                        style={
+                            'display': 'block', 'width': '100%', 'padding': '0.5rem',
+                            'background': '#56B4E9', 'color': 'white', 'border': 'none',
+                            'borderRadius': '4px', 'cursor': 'pointer', 'fontSize': '0.9rem',
                         },
                     ),
                 ], id='download-section', style={'display': 'none'}),
@@ -88,7 +98,22 @@ def get_layout() -> html.Div:
                                 dcc.Graph(id='huc4-volume-graph', style={'flex': '1', 'minWidth': '0'},
                                           responsive=True, config={'displayModeBar': False}),
                             ], className='chart-pair',
-                               style={'display': 'flex', 'gap': '1rem'}),
+                               style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
+                            html.Div([
+                                html.P([
+                                    html.Strong('Data: '),
+                                    'NOAA SNODAS (~1 km daily gridded SWE). Assimilates SNOTEL/COOP ground stations '
+                                    'with meteorological model forcing. ',
+                                    html.Strong('Limitations: '),
+                                    'Station network thins above ~7,000 ft, leading to underestimation of deep '
+                                    'mountain snowpack (published bias: 20–40% low in high-elevation basins). '
+                                    'Glacier pixels are excluded. The SWE drop-off above ~6,500 ft likely reflects '
+                                    'both true late-season ablation on exposed terrain and SNODAS model skill degradation.',
+                                ], style={'margin': '0'}),
+                            ], style={
+                                'fontSize': '0.75rem', 'color': '#666', 'lineHeight': '1.5',
+                                'borderTop': '1px solid #ddd', 'paddingTop': '0.6rem',
+                            }),
                         ], style={'padding': '1rem'}),
                     ]),
                     dcc.Tab(label='Trends', value='trends', children=[
