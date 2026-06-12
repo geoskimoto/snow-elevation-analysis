@@ -8,7 +8,7 @@ from rasterio.enums import Resampling
 _DEFAULT_DEM_CACHE = (
     Path(__file__).parent / "data" / "cache" / "dem" / "columbia_basin_swe_aligned.tif"
 )
-_COLUMBIA_BASIN_BOUNDS = (-125.0, 24.0, -66.5, 53.0)
+_COLUMBIA_BASIN_BOUNDS = (-125.0, 42.0, -110.0, 52.0)
 
 
 def warp_dem_to_grid(raw_dem: Path, reference_tif: Path, output: Path) -> None:
@@ -29,6 +29,7 @@ def warp_dem_to_grid(raw_dem: Path, reference_tif: Path, output: Path) -> None:
             dst_transform=dst_transform,
             dst_crs=dst_crs,
             resampling=Resampling.bilinear,
+            dst_nodata=-9999.0,
         )
 
     with rasterio.open(
@@ -47,22 +48,23 @@ def warp_dem_to_grid(raw_dem: Path, reference_tif: Path, output: Path) -> None:
 def build_aligned_dem(swe_tif: Path, dem_cache: Path) -> None:
     """Fetch SRTM 90m for Columbia Basin bbox, warp to SNODAS grid, cache."""
     import elevation
-    import tempfile
 
     dem_cache.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as f:
-        raw_path = Path(f.name)
+    tmp_raw = dem_cache.parent / "raw_dem_download.tif"
+    tmp_warped = dem_cache.parent / "dem_warped.tmp.tif"
 
     try:
         elevation.clip(
             bounds=_COLUMBIA_BASIN_BOUNDS,
-            output=str(raw_path),
+            output=str(tmp_raw),
             product="SRTM3",
         )
-        warp_dem_to_grid(raw_path, swe_tif, dem_cache)
+        warp_dem_to_grid(tmp_raw, swe_tif, tmp_warped)
+        tmp_warped.rename(dem_cache)
     finally:
-        if raw_path.exists():
-            raw_path.unlink()
+        for p in [tmp_raw, tmp_warped]:
+            if p.exists():
+                p.unlink()
         elevation.clean()
 
 
