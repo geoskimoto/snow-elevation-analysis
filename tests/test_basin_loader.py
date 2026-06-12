@@ -25,9 +25,17 @@ def test_load_huc4_returns_geodataframe():
     assert isinstance(gdf, gpd.GeoDataFrame)
 
 
-def test_load_huc4_has_twelve_subbasins():
+def test_load_huc4_has_expected_subbasins():
     gdf = basin_loader.load_huc4()
-    assert len(gdf) == 12
+    # 10 original HUC4s + 4 sub-basins replacing 1701 and 1702
+    assert len(gdf) == 14
+    names = set(gdf['name'])
+    assert 'Kootenai' in names
+    assert 'Pend Oreille-Spokane' in names
+    assert 'Upper Columbia (BC)' in names
+    assert 'Upper Columbia (Washington)' in names
+    assert 'Kootenai-Pend Oreille-Spokane' not in names
+    assert 'Upper Columbia' not in names
 
 
 def test_load_huc4_has_name_column():
