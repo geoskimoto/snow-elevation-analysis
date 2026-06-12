@@ -82,3 +82,120 @@ def test_make_huc4_figure_empty_dict():
     fig = make_huc4_figure({}, datetime(2024, 4, 1))
     assert isinstance(fig, go.Figure)
     assert len(fig.data) == 0
+
+
+# ---------------------------------------------------------------------------
+# Timeseries fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def timeseries_df():
+    dates = pd.date_range('2024-10-01', periods=4, freq='W')
+    return pd.DataFrame({
+        'date': list(dates) * 3,
+        'basin': (
+            ['Columbia River Basin'] * 4
+            + ['Upper Columbia'] * 4
+            + ['Snake River'] * 4
+        ),
+        'total_swe_volume_km3': [0.1, 0.2, 0.3, 0.4] * 3,
+    })
+
+
+# ---------------------------------------------------------------------------
+# make_basin_timeseries_figure
+# ---------------------------------------------------------------------------
+
+def test_make_basin_timeseries_figure_returns_figure(timeseries_df):
+    from charts import make_basin_timeseries_figure
+    fig = make_basin_timeseries_figure(timeseries_df, 2024)
+    assert isinstance(fig, go.Figure)
+
+
+def test_make_basin_timeseries_figure_has_one_trace(timeseries_df):
+    from charts import make_basin_timeseries_figure
+    fig = make_basin_timeseries_figure(timeseries_df, 2024)
+    assert len(fig.data) == 1
+
+
+def test_make_basin_timeseries_figure_empty_df_returns_empty():
+    from charts import make_basin_timeseries_figure
+    empty = pd.DataFrame(columns=['date', 'basin', 'total_swe_volume_km3'])
+    fig = make_basin_timeseries_figure(empty, 2024)
+    assert isinstance(fig, go.Figure)
+    assert len(fig.data) == 0
+
+
+def test_make_basin_timeseries_figure_no_columbia_rows_returns_empty():
+    from charts import make_basin_timeseries_figure
+    df = pd.DataFrame({
+        'date': pd.date_range('2024-10-01', periods=2, freq='W'),
+        'basin': ['Snake River', 'Upper Columbia'],
+        'total_swe_volume_km3': [0.1, 0.2],
+    })
+    fig = make_basin_timeseries_figure(df, 2024)
+    assert isinstance(fig, go.Figure)
+    assert len(fig.data) == 0
+
+
+def test_make_basin_timeseries_figure_xaxis_title(timeseries_df):
+    from charts import make_basin_timeseries_figure
+    fig = make_basin_timeseries_figure(timeseries_df, 2024)
+    assert fig.layout.xaxis.title.text == 'Date'
+
+
+def test_make_basin_timeseries_figure_yaxis_title(timeseries_df):
+    from charts import make_basin_timeseries_figure
+    fig = make_basin_timeseries_figure(timeseries_df, 2024)
+    assert 'km' in fig.layout.yaxis.title.text
+
+
+# ---------------------------------------------------------------------------
+# make_huc4_timeseries_figure
+# ---------------------------------------------------------------------------
+
+def test_make_huc4_timeseries_figure_returns_figure(timeseries_df):
+    from charts import make_huc4_timeseries_figure
+    fig = make_huc4_timeseries_figure(timeseries_df, 2024)
+    assert isinstance(fig, go.Figure)
+
+
+def test_make_huc4_timeseries_figure_trace_count(timeseries_df):
+    from charts import make_huc4_timeseries_figure
+    fig = make_huc4_timeseries_figure(timeseries_df, 2024)
+    # timeseries_df has 2 subbasins: Upper Columbia, Snake River
+    assert len(fig.data) == 2
+
+
+def test_make_huc4_timeseries_figure_excludes_columbia(timeseries_df):
+    from charts import make_huc4_timeseries_figure
+    fig = make_huc4_timeseries_figure(timeseries_df, 2024)
+    trace_names = [t.name for t in fig.data]
+    assert 'Columbia River Basin' not in trace_names
+
+
+def test_make_huc4_timeseries_figure_empty_df_returns_empty():
+    from charts import make_huc4_timeseries_figure
+    empty = pd.DataFrame(columns=['date', 'basin', 'total_swe_volume_km3'])
+    fig = make_huc4_timeseries_figure(empty, 2024)
+    assert isinstance(fig, go.Figure)
+    assert len(fig.data) == 0
+
+
+def test_make_huc4_timeseries_figure_xaxis_title(timeseries_df):
+    from charts import make_huc4_timeseries_figure
+    fig = make_huc4_timeseries_figure(timeseries_df, 2024)
+    assert fig.layout.xaxis.title.text == 'Date'
+
+
+def test_make_huc4_timeseries_figure_yaxis_title(timeseries_df):
+    from charts import make_huc4_timeseries_figure
+    fig = make_huc4_timeseries_figure(timeseries_df, 2024)
+    assert 'km' in fig.layout.yaxis.title.text
+
+
+def test_make_huc4_timeseries_figure_uses_different_colors(timeseries_df):
+    from charts import make_huc4_timeseries_figure
+    fig = make_huc4_timeseries_figure(timeseries_df, 2024)
+    colors = [trace.line.color for trace in fig.data]
+    assert colors[0] != colors[1]
