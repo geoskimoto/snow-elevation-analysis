@@ -123,7 +123,7 @@ def make_huc4_volume_figure(bands_by_subbasin: dict, date: datetime) -> go.Figur
 
 def make_basin_timeseries_figure(df: pd.DataFrame, wy: int) -> go.Figure:
     """Return a single-line time series of Columbia River Basin SWE volume."""
-    basin_df = df[df['basin'] == 'Columbia River Basin'] if not df.empty else df
+    basin_df = df[df['basin'] == 'Columbia River Basin']
     if basin_df.empty:
         return go.Figure()
     fig = go.Figure()
