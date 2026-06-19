@@ -1,6 +1,7 @@
 import diskcache
 from dash import Dash, DiskcacheManager
 from flask import Flask
+from streamflows_auth import protect_app
 
 import callbacks
 import config
@@ -33,3 +34,4 @@ def create_app() -> Dash:
 
 app = create_app()
 server = app.server
+protect_app(server, "streamflow")
