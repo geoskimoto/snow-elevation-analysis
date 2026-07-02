@@ -2,7 +2,7 @@
 import pytest
 import numpy as np
 import rasterio
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import snodas_fetcher
@@ -105,3 +105,36 @@ def test_fetch_swe_raises_on_ftp_failure(tmp_path):
                side_effect=ConnectionError("FTP timeout")):
         with pytest.raises(ConnectionError, match="FTP timeout"):
             snodas_fetcher.fetch_swe(date, cache_dir=tmp_path)
+
+
+# --- Unit: fetch_latest_swe scans back for the newest available product ---
+
+def test_fetch_latest_uses_reference_date_when_available(tmp_path):
+    ref = datetime(2026, 6, 20)
+    with patch('snodas_fetcher.fetch_swe', return_value=tmp_path / "x.tif") as m:
+        tif, actual = snodas_fetcher.fetch_latest_swe(ref, cache_dir=tmp_path)
+    assert actual == ref
+    assert m.call_count == 1  # newest date preferred; no fallback needed
+
+
+def test_fetch_latest_falls_back_to_previous_day(tmp_path):
+    ref = datetime(2026, 6, 20)
+
+    def side_effect(date, cache_dir=None):
+        if date == ref:
+            raise ConnectionError("550 Can't open SNODAS_20260620.tar")
+        return tmp_path / "y.tif"
+
+    with patch('snodas_fetcher.fetch_swe', side_effect=side_effect) as m:
+        tif, actual = snodas_fetcher.fetch_latest_swe(ref, cache_dir=tmp_path)
+    assert actual == ref - timedelta(days=1)
+    assert m.call_count == 2
+
+
+def test_fetch_latest_raises_when_nothing_in_window(tmp_path):
+    ref = datetime(2026, 6, 20)
+    with patch('snodas_fetcher.fetch_swe',
+               side_effect=ConnectionError("nope")) as m:
+        with pytest.raises(ConnectionError, match="No SNODAS product available"):
+            snodas_fetcher.fetch_latest_swe(ref, cache_dir=tmp_path, max_lookback_days=3)
+    assert m.call_count == 4  # deltas 0..3 inclusive

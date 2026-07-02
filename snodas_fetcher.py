@@ -2,7 +2,7 @@ import ftplib
 import gzip
 import shutil
 import tarfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -127,3 +127,34 @@ def fetch_swe(date: datetime, cache_dir: Path = _DEFAULT_CACHE) -> Path:
         return tif
     download_and_extract(date, tif)
     return tif
+
+
+def fetch_latest_swe(
+    reference_date: datetime,
+    cache_dir: Path = _DEFAULT_CACHE,
+    max_lookback_days: int = 5,
+) -> tuple[Path, datetime]:
+    """Fetch the most recent available SNODAS SWE at or before reference_date.
+
+    NSIDC publishes the masked product with a lag, so the file for a given day
+    is usually not on the FTP server yet when a job runs that same morning
+    (requesting today's date returns a 550 "no such file"). This scans backward
+    from reference_date up to max_lookback_days and returns the first date whose
+    product downloads successfully — self-healing across publish lag and short
+    NSIDC outages.
+
+    Returns (tif_path, actual_date). Raises ConnectionError if no product is
+    available within the lookback window.
+    """
+    last_error: Exception | None = None
+    for delta in range(max_lookback_days + 1):
+        candidate = reference_date - timedelta(days=delta)
+        try:
+            return fetch_swe(candidate, cache_dir=cache_dir), candidate
+        except (ConnectionError, RuntimeError) as exc:
+            last_error = exc
+            continue
+    raise ConnectionError(
+        f"No SNODAS product available within {max_lookback_days} days of "
+        f"{reference_date.date()}"
+    ) from last_error

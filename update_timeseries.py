@@ -33,7 +33,7 @@ from basin_loader import load_huc2, load_huc4
 from dem_processor import get_aligned_dem
 from elevation_bands import compute_bands
 from pipeline import load_band_cache, save_band_cache
-from snodas_fetcher import fetch_swe
+from snodas_fetcher import fetch_swe, fetch_latest_swe
 from timeseries import append_volumes
 
 # ---------------------------------------------------------------------------
@@ -91,12 +91,10 @@ def main() -> None:
         today = args.date.replace(hour=0, minute=0, second=0, microsecond=0)
     else:
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    date_key = today.strftime('%Y%m%d')
-
     cache_dir = config.get_cache_dir()
     dem_cache = cache_dir / 'dem' / 'columbia_basin_swe_aligned.tif'
 
-    logger.info('=== update_timeseries %s ===', today.date())
+    logger.info('=== update_timeseries (reference %s) ===', today.date())
     logger.info('cache_dir: %s', cache_dir)
 
     # Load basin boundaries early (outside try block) so missing files fail loudly
@@ -104,20 +102,33 @@ def main() -> None:
     huc2 = load_huc2()
     huc4 = load_huc4()
 
-    # Idempotency: exit cleanly if band cache already present
-    cached = load_band_cache(date_key, cache_dir)
-    if cached is not None:
-        logger.info('Band cache already exists for %s — nothing to do.', today.date())
-        # Ensure timeseries entry exists in case it was missed in a prior run
-        try:
-            append_volumes(today, cached, cache_dir)
-        except Exception as exc:
-            logger.warning('timeseries append failed (non-fatal): %s', exc)
-        sys.exit(0)
-
     try:
-        logger.info('Fetching SNODAS SWE for %s ...', today.date())
-        swe_tif = fetch_swe(today, cache_dir=cache_dir)
+        # SNODAS publishes the masked product with a lag, so the file for a given
+        # day is usually not on the FTP server yet when this runs that morning
+        # (a request for today's date returns 550 "no such file"). For the normal
+        # cron/default case, fetch the most recent available date instead of
+        # failing on today's missing file. An explicit --date still targets that
+        # exact day (for backfills).
+        if args.date:
+            logger.info('Fetching SNODAS SWE for %s ...', today.date())
+            swe_tif = fetch_swe(today, cache_dir=cache_dir)
+            target = today
+        else:
+            logger.info('Fetching latest available SNODAS SWE at or before %s ...', today.date())
+            swe_tif, target = fetch_latest_swe(today, cache_dir=cache_dir)
+            logger.info('Latest available SNODAS product: %s', target.date())
+
+        date_key = target.strftime('%Y%m%d')
+
+        # Idempotency: if bands for the target date are already cached, we're current.
+        cached = load_band_cache(date_key, cache_dir)
+        if cached is not None:
+            logger.info('Band cache already exists for %s — nothing to do.', target.date())
+            try:
+                append_volumes(target, cached, cache_dir)
+            except Exception as exc:
+                logger.warning('timeseries append failed (non-fatal): %s', exc)
+            sys.exit(0)
 
         logger.info('Loading aligned DEM ...')
         dem_tif = get_aligned_dem(swe_tif, dem_cache=dem_cache)
@@ -136,9 +147,9 @@ def main() -> None:
             )
 
         save_band_cache(bands_by_basin, date_key, cache_dir)
-        append_volumes(today, bands_by_basin, cache_dir)
+        append_volumes(target, bands_by_basin, cache_dir)
 
-        logger.info('Done — %d basins processed for %s.', len(bands_by_basin), today.date())
+        logger.info('Done — %d basins processed for %s.', len(bands_by_basin), target.date())
         sys.exit(0)
 
     except (ConnectionError, OSError, IOError) as exc:
