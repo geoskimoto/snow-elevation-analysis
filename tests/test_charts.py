@@ -28,34 +28,47 @@ def test_make_huc2_figure_returns_figure(sample_df):
     assert isinstance(fig, go.Figure)
 
 
-def test_make_huc2_figure_has_one_trace(sample_df):
+def test_make_huc2_figure_has_data_trace_plus_meter_axis_trace(sample_df):
     from charts import make_huc2_figure
     fig = make_huc2_figure(sample_df, datetime(2024, 4, 1))
-    assert len(fig.data) == 1
+    # one data trace + one invisible trace that activates the right-hand
+    # meters axis (yaxis2)
+    assert len(fig.data) == 2
+    assert fig.data[1].yaxis == 'y2'
+    assert fig.data[1].x == (None,)
 
 
-def test_make_huc2_figure_x_is_swe(sample_df):
+def test_make_huc2_figure_x_is_swe_inches(sample_df):
     from charts import make_huc2_figure
     fig = make_huc2_figure(sample_df, datetime(2024, 4, 1))
-    assert list(fig.data[0].x) == [5.0, 80.0, 200.0, 180.0]
+    # mean_swe_mm [5, 80, 200, 180] converted to inches
+    assert list(fig.data[0].x) == pytest.approx(
+        [0.19685, 3.14961, 7.87402, 7.08662], abs=1e-4
+    )
 
 
-def test_make_huc2_figure_y_is_elevation(sample_df):
+def test_make_huc2_figure_y_is_elevation_feet(sample_df):
     from charts import make_huc2_figure
     fig = make_huc2_figure(sample_df, datetime(2024, 4, 1))
-    assert list(fig.data[0].y) == [0, 250, 500, 750]
+    # elev_band_m [0, 250, 500, 750] converted to feet
+    assert list(fig.data[0].y) == pytest.approx(
+        [0.0, 820.21, 1640.42, 2460.63], abs=1e-2
+    )
 
 
 def test_make_huc2_figure_xaxis_label(sample_df):
     from charts import make_huc2_figure
     fig = make_huc2_figure(sample_df, datetime(2024, 4, 1))
-    assert 'mm' in fig.layout.xaxis.title.text
+    assert '(in)' in fig.layout.xaxis.title.text
 
 
-def test_make_huc2_figure_yaxis_label(sample_df):
+def test_make_huc2_figure_yaxis_labels(sample_df):
     from charts import make_huc2_figure
     fig = make_huc2_figure(sample_df, datetime(2024, 4, 1))
-    assert 'm' in fig.layout.yaxis.title.text
+    # feet on the primary (left) axis, meters mirrored on the right
+    assert '(ft)' in fig.layout.yaxis.title.text
+    assert '(m)' in fig.layout.yaxis2.title.text
+    assert fig.layout.yaxis2.side == 'right'
 
 
 def test_make_huc4_figure_returns_figure(sample_huc4):
@@ -67,7 +80,10 @@ def test_make_huc4_figure_returns_figure(sample_huc4):
 def test_make_huc4_figure_has_trace_per_basin(sample_huc4):
     from charts import make_huc4_figure
     fig = make_huc4_figure(sample_huc4, datetime(2024, 4, 1))
-    assert len(fig.data) == 2
+    # one trace per subbasin + the meters-axis activation trace
+    assert len(fig.data) == 3
+    assert [t.name for t in fig.data[:2]] == ['Snake River', 'Upper Columbia']
+    assert fig.data[2].yaxis == 'y2'
 
 
 def test_make_huc4_figure_uses_different_colors(sample_huc4):
@@ -81,7 +97,9 @@ def test_make_huc4_figure_empty_dict():
     from charts import make_huc4_figure
     fig = make_huc4_figure({}, datetime(2024, 4, 1))
     assert isinstance(fig, go.Figure)
-    assert len(fig.data) == 0
+    # no basin traces — only the meters-axis activation trace remains
+    assert len(fig.data) == 1
+    assert fig.data[0].yaxis == 'y2'
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +165,7 @@ def test_make_basin_timeseries_figure_xaxis_title(timeseries_df):
 def test_make_basin_timeseries_figure_yaxis_title(timeseries_df):
     from charts import make_basin_timeseries_figure
     fig = make_basin_timeseries_figure(timeseries_df, 2024)
-    assert 'km' in fig.layout.yaxis.title.text
+    assert 'MAF' in fig.layout.yaxis.title.text
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +209,7 @@ def test_make_huc4_timeseries_figure_xaxis_title(timeseries_df):
 def test_make_huc4_timeseries_figure_yaxis_title(timeseries_df):
     from charts import make_huc4_timeseries_figure
     fig = make_huc4_timeseries_figure(timeseries_df, 2024)
-    assert 'km' in fig.layout.yaxis.title.text
+    assert 'MAF' in fig.layout.yaxis.title.text
 
 
 def test_make_huc4_timeseries_figure_uses_different_colors(timeseries_df):

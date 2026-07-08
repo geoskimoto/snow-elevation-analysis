@@ -8,44 +8,41 @@ import plotly.graph_objects as go
 import pytest
 
 
-def test_make_download_zip_with_two_files(tmp_path):
-    from callbacks import _make_download_zip
-    huc2 = tmp_path / 'snow_hypsometric_huc2_20240401.png'
-    huc4 = tmp_path / 'snow_hypsometric_huc4_20240401.png'
-    huc2.write_bytes(b'PNG2')
-    huc4.write_bytes(b'PNG4')
-    result = _make_download_zip(huc2, huc4)
-    assert result['filename'] == 'snow_hypsometric.zip'
+def test_figs_to_zip_renders_real_png(tmp_path):
+    """End-to-end: a real figure renders via kaleido into a valid zip."""
+    from callbacks import _figs_to_zip
+    fig = go.Figure(go.Scatter(x=[1, 2], y=[3, 4]))
+    result = _figs_to_zip([('huc2.png', fig)])
+    assert result['filename'] == 'snow_analysis.zip'
     assert result['base64'] is True
-    import base64
-    raw = base64.b64decode(result['content'])
-    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-        names = zf.namelist()
-    assert huc2.name in names
-    assert huc4.name in names
-
-
-def test_make_download_zip_skips_missing_files(tmp_path):
-    from callbacks import _make_download_zip
-    huc2 = tmp_path / 'missing_huc2.png'
-    huc4 = tmp_path / 'missing_huc4.png'
-    result = _make_download_zip(huc2, huc4)
-    import base64
-    raw = base64.b64decode(result['content'])
-    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-        assert len(zf.namelist()) == 0
-
-
-def test_make_download_zip_partial_files(tmp_path):
-    from callbacks import _make_download_zip
-    huc2 = tmp_path / 'huc2.png'
-    huc2.write_bytes(b'data')
-    huc4 = tmp_path / 'missing.png'
-    result = _make_download_zip(huc2, huc4)
+    assert result['type'] == 'application/zip'
     import base64
     raw = base64.b64decode(result['content'])
     with zipfile.ZipFile(io.BytesIO(raw)) as zf:
         assert zf.namelist() == ['huc2.png']
+        png = zf.read('huc2.png')
+    assert png[:8] == b'\x89PNG\r\n\x1a\n'  # valid PNG magic bytes
+
+
+def test_figs_to_zip_one_entry_per_figure():
+    from callbacks import _figs_to_zip
+    names = [f'plot_{i}.png' for i in range(6)]
+    figs = [(n, go.Figure()) for n in names]
+    with patch('callbacks.pio.to_image', return_value=b'fake-png'):
+        result = _figs_to_zip(figs)
+    import base64
+    raw = base64.b64decode(result['content'])
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        assert zf.namelist() == names
+
+
+def test_figs_to_zip_empty_list_returns_empty_zip():
+    from callbacks import _figs_to_zip
+    result = _figs_to_zip([])
+    import base64
+    raw = base64.b64decode(result['content'])
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        assert zf.namelist() == []
 
 
 # ---------------------------------------------------------------------------
