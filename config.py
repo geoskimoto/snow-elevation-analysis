@@ -28,8 +28,13 @@ def get_output_dir() -> Path:
     return Path(os.environ.get('OUTPUT_DIR', 'output'))
 
 
+# Committed default for all deployments; a machine's local .env can
+# override with SNODAS_TRANSPORT=ftp (e.g. where FTP is preferred).
+SNODAS_TRANSPORT_DEFAULT = 'https'
+
+
 def get_snodas_transport() -> str:
-    v = os.environ.get('SNODAS_TRANSPORT', 'ftp').strip().lower()
+    v = os.environ.get('SNODAS_TRANSPORT', SNODAS_TRANSPORT_DEFAULT).strip().lower()
     if v not in ('ftp', 'https'):
         raise RuntimeError(
             f"Invalid SNODAS_TRANSPORT '{v}': must be 'ftp' or 'https'"

@@ -17,9 +17,14 @@ Columbia Basin HUC2/HUC4 basins. Data layer in `snodas_fetcher.py`,
 
 ## SNODAS download transport
 
-- `SNODAS_TRANSPORT` env var selects `ftp` (default, sidads.colorado.edu)
-  or `https` (noaadata.apps.nsidc.org mirror). Use `https` on hosts that
-  block outbound port 21. Both produce byte-identical rasters.
+- The committed default is `https` (noaadata.apps.nsidc.org mirror) — see
+  `SNODAS_TRANSPORT_DEFAULT` in `config.py`. A machine's local `.env` can
+  override with `SNODAS_TRANSPORT=ftp` (sidads.colorado.edu); some hosts
+  block outbound port 21, so https is the safe default. Both transports
+  produce byte-identical rasters.
+- Non-sensitive settings live as committed defaults in `config.py`;
+  `.env` (gitignored) holds secrets and per-machine overrides only.
+  Never commit `.env` — it contains the streamflows SSO `JWT_SECRET`.
 - The Dash app gets env vars from the systemd unit's `EnvironmentFile=`;
   the cron scripts (`update_timeseries.py`, `populate_timeseries.py`) load
   `.env` themselves via python-dotenv.

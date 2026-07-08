@@ -117,24 +117,24 @@ def test_https_url_format():
     )
 
 
-def test_download_tar_dispatches_ftp_by_default(monkeypatch, tmp_path):
+def test_download_tar_dispatches_https_by_default(monkeypatch, tmp_path):
     monkeypatch.delenv('SNODAS_TRANSPORT', raising=False)
-    date = datetime(2024, 4, 1)
-    with patch('snodas_fetcher._download_ftp') as mock_ftp, \
-         patch('snodas_fetcher._download_https') as mock_https:
-        snodas_fetcher._download_tar(date, tmp_path / "SNODAS_20240401.tar")
-    mock_ftp.assert_called_once()
-    mock_https.assert_not_called()
-
-
-def test_download_tar_dispatches_https_when_flag_set(monkeypatch, tmp_path):
-    monkeypatch.setenv('SNODAS_TRANSPORT', 'https')
     date = datetime(2024, 4, 1)
     with patch('snodas_fetcher._download_ftp') as mock_ftp, \
          patch('snodas_fetcher._download_https') as mock_https:
         snodas_fetcher._download_tar(date, tmp_path / "SNODAS_20240401.tar")
     mock_https.assert_called_once()
     mock_ftp.assert_not_called()
+
+
+def test_download_tar_dispatches_ftp_when_overridden(monkeypatch, tmp_path):
+    monkeypatch.setenv('SNODAS_TRANSPORT', 'ftp')
+    date = datetime(2024, 4, 1)
+    with patch('snodas_fetcher._download_ftp') as mock_ftp, \
+         patch('snodas_fetcher._download_https') as mock_https:
+        snodas_fetcher._download_tar(date, tmp_path / "SNODAS_20240401.tar")
+    mock_ftp.assert_called_once()
+    mock_https.assert_not_called()
 
 
 def test_https_download_writes_file(tmp_path):

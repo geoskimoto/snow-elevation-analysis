@@ -62,15 +62,15 @@ def test_get_output_dir_default(monkeypatch):
     assert str(cfg.get_output_dir()) == 'output'
 
 
-def test_get_snodas_transport_default_is_ftp(monkeypatch):
+def test_get_snodas_transport_default_is_https(monkeypatch):
     monkeypatch.delenv('SNODAS_TRANSPORT', raising=False)
     cfg = _reload_config(monkeypatch, {})
-    assert cfg.get_snodas_transport() == 'ftp'
-
-
-def test_get_snodas_transport_https(monkeypatch):
-    cfg = _reload_config(monkeypatch, {'SNODAS_TRANSPORT': 'https'})
     assert cfg.get_snodas_transport() == 'https'
+
+
+def test_get_snodas_transport_env_overrides_default(monkeypatch):
+    cfg = _reload_config(monkeypatch, {'SNODAS_TRANSPORT': 'ftp'})
+    assert cfg.get_snodas_transport() == 'ftp'
 
 
 def test_get_snodas_transport_case_insensitive(monkeypatch):
