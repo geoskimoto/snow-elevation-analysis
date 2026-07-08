@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "locale": "en_US.UTF-8",
+  "metadata": {
+    "appmode": "python-dash",
+    "entrypoint": "app:server"
+  },
+  "python": {
+    "version": "3.12.2",
+    "package_manager": {
+      "name": "pip",
+      "version": "26.0.1",
+      "package_file": "requirements.txt"
+    }
+  },
+  "files": {
+    "requirements.txt": {
+      "checksum": "9513e600ac2e8d730a9898ce2a3e97a7"
+    },
+    ".gitignore": {
+      "checksum": "91d0d9d65727f2258d320829c66a4f86"
+    },
+    "app.py": {
+      "checksum": "5e8b040f0a02d2425ca3331f7d661910"
+    },
+    "assets/responsive.css": {
+      "checksum": "6630931fcdd23a009512b0b4ca5b2b41"
+    },
+    "auth.py": {
+      "checksum": "8497c9b00e85b3f8cecd6ca8470b5caa"
+    },
+    "basin_loader.py": {
+      "checksum": "6300544debfa55eae296fcb9a67b3c99"
+    },
+    "callbacks.py": {
+      "checksum": "195b920ee8129b2013f26e8f56212d58"
+    },
+    "charts.py": {
+      "checksum": "6d0444e5701f7b652c6c3e39b1c5422b"
+    },
+    "config.py": {
+      "checksum": "c623d064af74e2a1e196877aeafc14f1"
+    },
+    "data/basemaps/huc2_pnw.geojson": {
+      "checksum": "d36f9cb810aa6b1215074b40c1d95d6e"
+    },
+    "data/basemaps/huc4_pnw.geojson": {
+      "checksum": "6226b75ac166f6a8ea3e444a24d92876"
+    },
+    "dem_processor.py": {
+      "checksum": "55803880b552130049dd71e75dd88e6b"
+    },
+    "docs/superpowers/plans/2026-06-12-dash-app.md": {
+      "checksum": "b2c0f1a9fac4ab97ca33949f85e0be52"
+    },
+    "docs/superpowers/plans/2026-06-12-snow-elevation-plot.md": {
+      "checksum": "6c8d698faaa42c0b714b9abee93b6645"
+    },
+    "docs/superpowers/specs/2026-06-12-dash-app-design.md": {
+      "checksum": "ab6df7e14e08e08ce514f62376e0a0ed"
+    },
+    "docs/superpowers/specs/2026-06-12-snow-elevation-plot-design.md": {
+      "checksum": "db54028df1c74371b4d78def508f2193"
+    },
+    "elevation_bands.py": {
+      "checksum": "a42663815d1c4d009fc85b08733ddfa2"
+    },
+    "layout.py": {
+      "checksum": "964dd1af9af13bf9c16390b184a0708c"
+    },
+    "logs/.gitkeep": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "main.py": {
+      "checksum": "599f9efbe916d9a75150bde486009943"
+    },
+    "pipeline.py": {
+      "checksum": "913209502f98c223fd3ac969e921eb93"
+    },
+    "plotter.py": {
+      "checksum": "26046e594142adab48ca9a5757dadee5"
+    },
+    "populate_timeseries.py": {
+      "checksum": "3578734823ce6fbe6ce3e82e2c90f10f"
+    },
+    "snodas_fetcher.py": {
+      "checksum": "42450e56017a14ed552e479ab4b9cba9"
+    },
+    "tests/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "tests/conftest.py": {
+      "checksum": "eea26fd937ec75118ceceece74332f94"
+    },
+    "tests/fixtures/snodas_20240401_columbia.tif": {
+      "checksum": "6c6fe2bb38f9ca998d5c26f18fe19053"
+    },
+    "tests/test_auth.py": {
+      "checksum": "ab4ec513b2ae279562e6c2a3fd45f6d8"
+    },
+    "tests/test_basin_loader.py": {
+      "checksum": "9a89674c68f15706e246acbb63c89b8c"
+    },
+    "tests/test_callbacks.py": {
+      "checksum": "3547c403eff5df32f3b11df6b393a6cd"
+    },
+    "tests/test_charts.py": {
+      "checksum": "90c07f4a99f9f0ad3f57076a6c890c85"
+    },
+    "tests/test_config.py": {
+      "checksum": "f595cad28091d60f336ea8359a9e56ba"
+    },
+    "tests/test_dem_processor.py": {
+      "checksum": "aa88ab8cf554756f4f73a015d2f8acd2"
+    },
+    "tests/test_elevation_bands.py": {
+      "checksum": "053d603a17988295a49e2c7b28087d4f"
+    },
+    "tests/test_integration.py": {
+      "checksum": "61e78428a4dde2718c497d11f7c82d16"
+    },
+    "tests/test_layout.py": {
+      "checksum": "fa2729ca4e4807968ccadb3aaec1c4a6"
+    },
+    "tests/test_login_routes.py": {
+      "checksum": "e87d5aad6d1e56eef51e4e3f993327df"
+    },
+    "tests/test_main.py": {
+      "checksum": "5a694b6d9ffce0cb3062a6b1bdad81f2"
+    },
+    "tests/test_pipeline.py": {
+      "checksum": "af00cacce303d485d511972dd3c86e5d"
+    },
+    "tests/test_plotter.py": {
+      "checksum": "6ab54eddecd3a3a5e3652ce3e2e75392"
+    },
+    "tests/test_snodas_fetcher.py": {
+      "checksum": "ff8e1e7ae011dd1dd5f15a85555c383d"
+    },
+    "tests/test_sso_integration.py": {
+      "checksum": "c1ab9f95b51ec1d4248f9d698aa20906"
+    },
+    "tests/test_timeseries.py": {
+      "checksum": "7156ea2d12c6def4b8080f02a32da144"
+    },
+    "timeseries.py": {
+      "checksum": "567a33403485bdc0cbdd75489021e30e"
+    },
+    "update_timeseries.py": {
+      "checksum": "e6dd78dad8244e8b8ea48108e2ca99c2"
+    },
+    "wsgi.py": {
+      "checksum": "e1fce3dcde8e0fdf8c5acdb17bb13610"
+    }
+  }
+}
