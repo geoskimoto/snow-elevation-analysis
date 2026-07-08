@@ -2,7 +2,12 @@ venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-data/cache/
+# Ignore runtime caches, but ship the aligned DEM — it's a stable 11 MB
+# artifact that lets deploys skip the 250 MB SRTM download entirely.
+data/cache/*
+!data/cache/dem/
+data/cache/dem/*
+!data/cache/dem/columbia_basin_swe_aligned.tif
 output/
 *.egg-info/
 .env
