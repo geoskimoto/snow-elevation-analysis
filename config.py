@@ -26,3 +26,12 @@ def get_cache_dir() -> Path:
 
 def get_output_dir() -> Path:
     return Path(os.environ.get('OUTPUT_DIR', 'output'))
+
+
+def get_snodas_transport() -> str:
+    v = os.environ.get('SNODAS_TRANSPORT', 'ftp').strip().lower()
+    if v not in ('ftp', 'https'):
+        raise RuntimeError(
+            f"Invalid SNODAS_TRANSPORT '{v}': must be 'ftp' or 'https'"
+        )
+    return v

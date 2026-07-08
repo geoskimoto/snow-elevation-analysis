@@ -107,6 +107,78 @@ def test_fetch_swe_raises_on_ftp_failure(tmp_path):
             snodas_fetcher.fetch_swe(date, cache_dir=tmp_path)
 
 
+# --- Unit: HTTPS transport (SNODAS_TRANSPORT flag) ---
+
+def test_https_url_format():
+    date = datetime(2024, 4, 1)
+    assert snodas_fetcher.https_url(date) == (
+        "https://noaadata.apps.nsidc.org/NOAA/G02158/masked/"
+        "2024/04_Apr/SNODAS_20240401.tar"
+    )
+
+
+def test_download_tar_dispatches_ftp_by_default(monkeypatch, tmp_path):
+    monkeypatch.delenv('SNODAS_TRANSPORT', raising=False)
+    date = datetime(2024, 4, 1)
+    with patch('snodas_fetcher._download_ftp') as mock_ftp, \
+         patch('snodas_fetcher._download_https') as mock_https:
+        snodas_fetcher._download_tar(date, tmp_path / "SNODAS_20240401.tar")
+    mock_ftp.assert_called_once()
+    mock_https.assert_not_called()
+
+
+def test_download_tar_dispatches_https_when_flag_set(monkeypatch, tmp_path):
+    monkeypatch.setenv('SNODAS_TRANSPORT', 'https')
+    date = datetime(2024, 4, 1)
+    with patch('snodas_fetcher._download_ftp') as mock_ftp, \
+         patch('snodas_fetcher._download_https') as mock_https:
+        snodas_fetcher._download_tar(date, tmp_path / "SNODAS_20240401.tar")
+    mock_https.assert_called_once()
+    mock_ftp.assert_not_called()
+
+
+def test_https_download_writes_file(tmp_path):
+    date = datetime(2024, 4, 1)
+    tmp_tar = tmp_path / "SNODAS_20240401.tar"
+    fake_body = b"tar-bytes-here"
+
+    fake_resp = MagicMock()
+    fake_resp.read.side_effect = [fake_body, b""]
+    fake_resp.__enter__.return_value = fake_resp
+
+    with patch('snodas_fetcher.urllib.request.urlopen',
+               return_value=fake_resp) as mock_open:
+        snodas_fetcher._download_https(date, tmp_tar)
+
+    assert mock_open.call_args[0][0] == snodas_fetcher.https_url(date)
+    assert tmp_tar.read_bytes() == fake_body
+
+
+def test_https_download_404_raises_connection_error(tmp_path):
+    import urllib.error
+    date = datetime(2024, 4, 1)
+    tmp_tar = tmp_path / "SNODAS_20240401.tar"
+    err = urllib.error.HTTPError(
+        snodas_fetcher.https_url(date), 404, "Not Found", {}, None
+    )
+    with patch('snodas_fetcher.urllib.request.urlopen', side_effect=err):
+        with pytest.raises(ConnectionError,
+                           match="SNODAS HTTPS download failed for 2024-04-01"):
+            snodas_fetcher._download_https(date, tmp_tar)
+    assert not tmp_tar.exists()  # no partial file left behind
+
+
+def test_https_download_network_error_raises_connection_error(tmp_path):
+    import urllib.error
+    date = datetime(2024, 4, 1)
+    tmp_tar = tmp_path / "SNODAS_20240401.tar"
+    with patch('snodas_fetcher.urllib.request.urlopen',
+               side_effect=urllib.error.URLError("timed out")):
+        with pytest.raises(ConnectionError, match="SNODAS HTTPS download failed"):
+            snodas_fetcher._download_https(date, tmp_tar)
+    assert not tmp_tar.exists()
+
+
 # --- Unit: fetch_latest_swe scans back for the newest available product ---
 
 def test_fetch_latest_uses_reference_date_when_available(tmp_path):

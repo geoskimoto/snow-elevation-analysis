@@ -2,6 +2,8 @@ import ftplib
 import gzip
 import shutil
 import tarfile
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -9,7 +11,11 @@ import numpy as np
 import rasterio
 from rasterio.transform import from_origin
 
+import config
+
 SNODAS_FTP_HOST = "sidads.colorado.edu"
+SNODAS_HTTPS_BASE = "https://noaadata.apps.nsidc.org/NOAA/G02158/masked"
+SNODAS_HTTPS_TIMEOUT_S = 120
 SNODAS_ROWS = 3351
 SNODAS_COLS = 6935
 SNODAS_XMIN = -124.733749999
@@ -44,6 +50,14 @@ def ftp_filename(date: datetime) -> str:
     return f"SNODAS_{date.strftime('%Y%m%d')}.tar"
 
 
+def https_url(date: datetime) -> str:
+    return (
+        f"{SNODAS_HTTPS_BASE}/"
+        f"{date.year}/{date.month:02d}_{_MONTH_ABBR[date.month]}/"
+        f"{ftp_filename(date)}"
+    )
+
+
 def swe_dat_filename(date: datetime) -> str:
     return f"us_ssmv11034tS__T0001TTNATS{date.strftime('%Y%m%d')}05HP001.dat.gz"
 
@@ -74,10 +88,7 @@ def dat_to_geotiff(
         dst.write(data, 1)
 
 
-def download_and_extract(date: datetime, tif_path: Path) -> None:
-    tmp_tar = tif_path.parent / ftp_filename(date)
-    tif_path.parent.mkdir(parents=True, exist_ok=True)
-
+def _download_ftp(date: datetime, tmp_tar: Path) -> None:
     try:
         with ftplib.FTP(SNODAS_FTP_HOST) as ftp:
             ftp.login()
@@ -91,6 +102,34 @@ def download_and_extract(date: datetime, tif_path: Path) -> None:
             f"SNODAS FTP download failed for {date.date()}: {e}\n"
             f"Try an earlier date or check your connection."
         ) from e
+
+
+def _download_https(date: datetime, tmp_tar: Path) -> None:
+    try:
+        with urllib.request.urlopen(
+            https_url(date), timeout=SNODAS_HTTPS_TIMEOUT_S
+        ) as resp, open(tmp_tar, "wb") as f:
+            shutil.copyfileobj(resp, f)
+    except OSError as e:  # URLError/HTTPError/timeouts all subclass OSError
+        if tmp_tar.exists():
+            tmp_tar.unlink()
+        raise ConnectionError(
+            f"SNODAS HTTPS download failed for {date.date()}: {e}\n"
+            f"Try an earlier date or check your connection."
+        ) from e
+
+
+def _download_tar(date: datetime, tmp_tar: Path) -> None:
+    if config.get_snodas_transport() == "https":
+        _download_https(date, tmp_tar)
+    else:
+        _download_ftp(date, tmp_tar)
+
+
+def download_and_extract(date: datetime, tif_path: Path) -> None:
+    tmp_tar = tif_path.parent / ftp_filename(date)
+    tif_path.parent.mkdir(parents=True, exist_ok=True)
+    _download_tar(date, tmp_tar)
 
     dat_gz_name = swe_dat_filename(date)
     tmp_dat_gz = tif_path.parent / dat_gz_name

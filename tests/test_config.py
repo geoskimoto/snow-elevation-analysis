@@ -60,3 +60,25 @@ def test_get_output_dir_default(monkeypatch):
     monkeypatch.delenv('OUTPUT_DIR', raising=False)
     cfg = _reload_config(monkeypatch, {'DASH_PASSWORD_HASH': 'h', 'SECRET_KEY': 'k'})
     assert str(cfg.get_output_dir()) == 'output'
+
+
+def test_get_snodas_transport_default_is_ftp(monkeypatch):
+    monkeypatch.delenv('SNODAS_TRANSPORT', raising=False)
+    cfg = _reload_config(monkeypatch, {})
+    assert cfg.get_snodas_transport() == 'ftp'
+
+
+def test_get_snodas_transport_https(monkeypatch):
+    cfg = _reload_config(monkeypatch, {'SNODAS_TRANSPORT': 'https'})
+    assert cfg.get_snodas_transport() == 'https'
+
+
+def test_get_snodas_transport_case_insensitive(monkeypatch):
+    cfg = _reload_config(monkeypatch, {'SNODAS_TRANSPORT': 'HTTPS'})
+    assert cfg.get_snodas_transport() == 'https'
+
+
+def test_get_snodas_transport_invalid_raises(monkeypatch):
+    cfg = _reload_config(monkeypatch, {'SNODAS_TRANSPORT': 'sftp'})
+    with pytest.raises(RuntimeError, match='SNODAS_TRANSPORT'):
+        cfg.get_snodas_transport()
