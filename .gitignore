@@ -8,6 +8,9 @@ data/cache/*
 !data/cache/dem/
 data/cache/dem/*
 !data/cache/dem/columbia_basin_swe_aligned.tif
+# Ship the trends timeseries snapshot too; refresh with:
+#   git add -f data/cache/timeseries/ && git commit && git push
+!data/cache/timeseries/
 output/
 *.egg-info/
 .env
