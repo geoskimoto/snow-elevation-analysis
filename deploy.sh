@@ -23,7 +23,7 @@
 #
 # Overridable via environment:
 #   SERVICE   systemd unit name        (default: snow-elevation-plot)
-#   HEALTH_URL  URL to curl post-restart (default: http://127.0.0.1:8050/login)
+#   HEALTH_URL  URL to curl post-restart (default: http://127.0.0.1:8052/login)
 #   BRANCH    git branch to deploy     (default: current branch)
 
 set -euo pipefail
@@ -32,7 +32,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 SERVICE="${SERVICE:-snow-elevation-plot}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8050/login}"
+# 8052, NOT 8050 — 8050 is dashboard.streamflows.org's gunicorn, which also
+# answers /login with a 302 and silently satisfies a mispointed health check.
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8052/login}"
 BRANCH="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 PY="$SCRIPT_DIR/venv/bin/python"
 

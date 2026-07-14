@@ -31,7 +31,8 @@ freshness = last commit/deploy.
 - User: `geoskimoto`
 - Checkout: `/home/geoskimoto/projects/snow_elevation_plot`
 - Virtualenv: `venv/` in the checkout
-- systemd unit: `snow-elevation-plot` (gunicorn `wsgi:server` on `127.0.0.1:8050`,
+- systemd unit: `snow-elevation-plot` (gunicorn `wsgi:server` on `127.0.0.1:8052` —
+  port 8050 belongs to a *different* app, `dashboard.streamflows.org`,
   `--timeout 300`, `EnvironmentFile=.env`)
 - nginx reverse-proxy → `https://snow-elevation-analysis.streamflows.org`
   (`proxy_read_timeout 310s`, must exceed gunicorn's 300s)
@@ -57,7 +58,7 @@ Overridable via environment:
 
 ```bash
 SERVICE=snow-elevation-plot \
-HEALTH_URL=http://127.0.0.1:8050/login \
+HEALTH_URL=http://127.0.0.1:8052/login \
 BRANCH=master \
 ./deploy.sh
 
@@ -75,7 +76,7 @@ The systemd unit and nginx proxy block are documented in full in
 sudo systemctl daemon-reload
 sudo systemctl enable --now snow-elevation-plot
 
-# nginx: proxy_pass http://127.0.0.1:8050 with WebSocket upgrade headers
+# nginx: proxy_pass http://127.0.0.1:8052 with WebSocket upgrade headers
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
