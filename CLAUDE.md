@@ -3,7 +3,26 @@
 Dash app that plots SNODAS snow-water-equivalent by elevation band for
 Columbia Basin HUC2/HUC4 basins. Data layer in `snodas_fetcher.py`,
 `pipeline.py`, `timeseries.py`; charts in `charts.py`; Dash callbacks in
-`callbacks.py`.
+`callbacks.py`. The app has three tabs: **Snowpack** (per-date hypsometric
+curves), **Trends** (current-WY volume timeseries), and **Historical**
+(cross-year climatology envelope, see below).
+
+## Historical / climatology tab
+
+- `climatology.py` aggregates *all* committed `WY*_volume.parquet` snapshots
+  into a day-of-water-year percentile envelope (min–max / 10–90 / 25–75 /
+  median) with the current WY overlaid; `charts.make_climatology_figure`
+  renders it and `callbacks.build_historical_view` wires it to the tab.
+- **Read-only at serve time.** The tab only reads committed volume parquets —
+  it never fetches SNODAS or writes cache — so it behaves identically on the
+  scheduled server and on Posit Connect (which cannot run jobs). Data
+  freshness on Posit = last commit/deploy.
+- **Backfill (server-only, one-time):**
+  `python populate_timeseries.py --start 2003-10-01 --discard-raster`. The
+  `--discard-raster` flag deletes each CONUS SWE GeoTIFF after its bands are
+  computed, keeping the full-record run from parking ~65 GB of intermediate
+  rasters; the committed volume parquets (~1 MB total) are what the tab needs.
+  `update_timeseries.py` accepts the same flag for the daily job.
 
 ## Testing
 

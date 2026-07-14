@@ -84,6 +84,12 @@ def main() -> None:
         default=None,
         help='Date to process in YYYY-MM-DD format (default: today).'
     )
+    parser.add_argument(
+        '--discard-raster',
+        action='store_true',
+        help='Delete the CONUS SWE GeoTIFF after its bands are computed, so the '
+             'daily job does not slowly accumulate intermediate rasters.',
+    )
     args = parser.parse_args()
 
     logger = _setup_logging()
@@ -148,6 +154,9 @@ def main() -> None:
 
         save_band_cache(bands_by_basin, date_key, cache_dir)
         append_volumes(target, bands_by_basin, cache_dir)
+        if args.discard_raster:
+            swe_tif.unlink(missing_ok=True)
+            logger.debug('Discarded raster %s', swe_tif.name)
 
         logger.info('Done — %d basins processed for %s.', len(bands_by_basin), target.date())
         sys.exit(0)

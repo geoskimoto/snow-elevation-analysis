@@ -19,6 +19,16 @@ def test_layout_contains_required_component_ids():
         'download-data',
         'error-msg',
         'result-store',
+        'historical-basin',
+        'historical-summary',
+        'climatology-graph',
     ]
     for cid in required_ids:
         assert cid in layout_str, f"Component ID '{cid}' missing from layout"
+
+
+def test_layout_has_historical_tab():
+    from layout import get_layout
+    layout_str = str(get_layout().to_plotly_json())
+    assert "value='historical'" in layout_str
+    assert "label='Historical'" in layout_str

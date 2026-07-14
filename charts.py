@@ -146,6 +146,96 @@ def make_huc4_volume_figure(bands_by_subbasin: dict, date: datetime) -> go.Figur
     return fig
 
 
+_CLIMATOLOGY_BLUE = '0, 114, 178'  # rgb of _PALETTE[0], reused for band fills
+_CURRENT_YEAR_COLOR = _PALETTE[5]  # '#D55E00' — contrasts with the blue envelope
+
+
+def _band_trace(x, lower, upper, fill_alpha: float, name: str) -> list:
+    """Return the (invisible lower bound, filled upper bound) trace pair.
+
+    Plotly's ``fill='tonexty'`` fills between a trace and the one added just
+    before it, so the lower bound must be appended immediately ahead of the
+    upper bound.
+    """
+    fillcolor = f'rgba({_CLIMATOLOGY_BLUE}, {fill_alpha})'
+    lower_trace = go.Scatter(
+        x=x, y=lower, mode='lines', line={'width': 0},
+        hoverinfo='skip', showlegend=False,
+    )
+    upper_trace = go.Scatter(
+        x=x, y=upper, mode='lines', line={'width': 0},
+        fill='tonexty', fillcolor=fillcolor,
+        hoverinfo='skip', name=name, showlegend=True,
+    )
+    return [lower_trace, upper_trace]
+
+
+def _climatology_empty_figure(message: str) -> go.Figure:
+    fig = go.Figure()
+    fig.update_layout(
+        template='plotly_white',
+        margin=_MARGIN_SINGLE,
+        annotations=[dict(
+            text=message, x=0.5, y=0.5, xref='paper', yref='paper',
+            showarrow=False, font={'size': 14, 'color': '#888'},
+        )],
+    )
+    return fig
+
+
+def make_climatology_figure(clim_df: pd.DataFrame, current_df: pd.DataFrame,
+                            basin_label: str, wy: int, summary: dict | None = None) -> go.Figure:
+    """Percentile envelope (min–max / 10–90 / 25–75 / median) with the current
+    water year overlaid. Volumes are in MAF; the x-axis runs Oct → Sep.
+    """
+    if clim_df is None or clim_df.empty:
+        return _climatology_empty_figure(
+            'Not enough history yet — climatology needs several prior water years.'
+        )
+
+    x = clim_df['ref_date']
+    to_maf = _KM3_TO_MAF
+    fig = go.Figure()
+
+    # Outermost band first so darker inner bands paint on top.
+    fig.add_traces(_band_trace(x, clim_df['min'] * to_maf, clim_df['max'] * to_maf,
+                               0.10, 'Min–Max'))
+    fig.add_traces(_band_trace(x, clim_df['p10'] * to_maf, clim_df['p90'] * to_maf,
+                               0.18, '10–90th pct'))
+    fig.add_traces(_band_trace(x, clim_df['p25'] * to_maf, clim_df['p75'] * to_maf,
+                               0.30, '25–75th pct'))
+
+    fig.add_trace(go.Scatter(
+        x=x, y=clim_df['p50'] * to_maf, mode='lines',
+        line={'color': '#555555', 'width': 1.5, 'dash': 'dash'},
+        name='Median',
+    ))
+
+    if current_df is not None and not current_df.empty:
+        fig.add_trace(go.Scatter(
+            x=current_df['ref_date'], y=current_df['total_swe_volume_km3'] * to_maf,
+            mode='lines', line={'color': _CURRENT_YEAR_COLOR, 'width': 2.5},
+            name=f'WY{wy}',
+        ))
+
+    title = f'{basin_label} — SWE Climatology'
+    if summary:
+        title += (f'<br><sub>WY{wy}: {summary["pct_of_median"]:.0f}% of median · '
+                  f'ranked {summary["rank_from_bottom"]} of {summary["total_years"]} years '
+                  f'(as of {summary["as_of"]:%b %d})</sub>')
+
+    fig.update_layout(
+        title=dict(text=title, font={'size': 13}),
+        xaxis=dict(title='Water Year (Oct–Sep)', tickformat='%b', dtick='M1'),
+        yaxis_title='SWE Volume (MAF)',
+        template='plotly_white',
+        legend=_LEGEND_BELOW,
+        margin=dict(l=55, r=55, t=80, b=140),
+        hovermode='x unified',
+    )
+    return fig
+
+
 def make_basin_timeseries_figure(df: pd.DataFrame, wy: int) -> go.Figure:
     basin_df = df[df['basin'] == 'Columbia River Basin']
     if basin_df.empty:

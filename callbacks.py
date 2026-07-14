@@ -9,9 +9,53 @@ import plotly.io as pio
 from dash import Output, Input, State, no_update
 
 import charts
+import climatology
 import config
 import pipeline
 import timeseries
+
+
+def _annotated_empty_figure(message: str) -> go.Figure:
+    """A blank plotly_white figure carrying a centered grey annotation."""
+    fig = go.Figure()
+    fig.update_layout(
+        template='plotly_white',
+        annotations=[dict(
+            text=message, x=0.5, y=0.5, xref='paper', yref='paper',
+            showarrow=False, font={'size': 14, 'color': '#888'},
+        )],
+    )
+    return fig
+
+
+def build_historical_view(df, wy: int, basin: str | None) -> tuple[go.Figure, str]:
+    """Return ``(figure, caption)`` for the Historical tab.
+
+    Pure function of an already-loaded all-water-years DataFrame — no I/O — so
+    it is unit-testable and shared by the Dash callback. Degrades to an
+    annotated empty figure when there is no data or too little history.
+    """
+    basin = basin or 'Columbia River Basin'
+    if df.empty:
+        return _annotated_empty_figure(
+            'No data yet — run populate_timeseries.py to build the record.'), ''
+
+    n_years = climatology.n_historical_years(df, basin, wy)
+    if n_years < climatology.MIN_YEARS_FOR_ENVELOPE:
+        return _annotated_empty_figure(
+            f'Not enough history for {basin} yet — {n_years} prior water '
+            f'year(s); need at least {climatology.MIN_YEARS_FOR_ENVELOPE}. '
+            f'Run the full-record backfill to populate.'), ''
+
+    clim = climatology.compute_climatology(df, basin, wy)
+    current = climatology.current_series(df, basin, wy)
+    summary = climatology.summarize_current(df, basin, wy)
+    fig = charts.make_climatology_figure(clim, current, basin, wy, summary)
+
+    hist_wys = sorted(df[(df['basin'] == basin) & (df['wy'] != wy)]['wy'].unique())
+    caption = (f'Envelope from {n_years} water years '
+               f'(WY{hist_wys[0]}–WY{hist_wys[-1]}); bold line is WY{wy}.')
+    return fig, caption
 
 
 def _figs_to_zip(named_figs: list[tuple[str, go.Figure]]) -> dict:
@@ -196,3 +240,34 @@ def register(app) -> None:
             charts.make_basin_timeseries_figure(df, wy),
             charts.make_huc4_timeseries_figure(df, wy),
         )
+
+    @app.callback(
+        Output('historical-basin', 'options'),
+        Input('main-tabs', 'value'),
+    )
+    def populate_historical_basins(tab_value):
+        if tab_value != 'historical':
+            return no_update
+        df = climatology.load_all_water_years(config.get_cache_dir())
+        if df.empty:
+            return no_update
+        basins = list(df['basin'].unique())
+        huc2 = 'Columbia River Basin'
+        ordered = ([huc2] if huc2 in basins else []) + sorted(b for b in basins if b != huc2)
+        return [{'label': b, 'value': b} for b in ordered]
+
+    @app.callback(
+        Output('climatology-graph', 'figure'),
+        Output('historical-summary', 'children'),
+        Input('main-tabs', 'value'),
+        Input('historical-basin', 'value'),
+    )
+    def update_historical_tab(tab_value, basin):
+        if tab_value != 'historical':
+            return _annotated_empty_figure(''), ''
+        # Read-only: climatology serves committed volume parquets. It never
+        # fetches SNODAS or writes cache, so it behaves identically on the
+        # scheduled server and on Posit Connect (which cannot run jobs).
+        df = climatology.load_all_water_years(config.get_cache_dir())
+        wy = timeseries.water_year(date.today())
+        return build_historical_view(df, wy, basin)

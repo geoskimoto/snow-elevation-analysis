@@ -217,3 +217,100 @@ def test_make_huc4_timeseries_figure_uses_different_colors(timeseries_df):
     fig = make_huc4_timeseries_figure(timeseries_df, 2024)
     colors = [trace.line.color for trace in fig.data]
     assert colors[0] != colors[1]
+
+
+# ---------------------------------------------------------------------------
+# make_climatology_figure
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def clim_df():
+    """A minimal 3-day percentile envelope (columns as compute_climatology)."""
+    return pd.DataFrame({
+        'dow': [1, 2, 3],
+        'ref_date': pd.to_datetime(['2022-10-01', '2022-10-02', '2022-10-03']),
+        'min': [1.0, 2.0, 3.0],
+        'p10': [1.5, 2.5, 3.5],
+        'p25': [2.0, 3.0, 4.0],
+        'p50': [3.0, 4.0, 5.0],
+        'p75': [4.0, 5.0, 6.0],
+        'p90': [4.5, 5.5, 6.5],
+        'max': [5.0, 6.0, 7.0],
+        'n': [10, 10, 10],
+    })
+
+
+@pytest.fixture
+def clim_current_df():
+    return pd.DataFrame({
+        'dow': [1, 2, 3],
+        'ref_date': pd.to_datetime(['2022-10-01', '2022-10-02', '2022-10-03']),
+        'date': pd.to_datetime(['2025-10-01', '2025-10-02', '2025-10-03']),
+        'total_swe_volume_km3': [3.2, 4.1, 5.5],
+    })
+
+
+def test_make_climatology_figure_returns_figure(clim_df, clim_current_df):
+    from charts import make_climatology_figure
+    fig = make_climatology_figure(clim_df, clim_current_df, 'Columbia River Basin', 2026)
+    assert isinstance(fig, go.Figure)
+
+
+def test_make_climatology_figure_trace_count(clim_df, clim_current_df):
+    from charts import make_climatology_figure
+    fig = make_climatology_figure(clim_df, clim_current_df, 'Columbia River Basin', 2026)
+    # 3 band pairs (6) + median (1) + current year (1)
+    assert len(fig.data) == 8
+
+
+def test_make_climatology_figure_without_current_year(clim_df):
+    from charts import make_climatology_figure
+    empty_current = pd.DataFrame(columns=['dow', 'ref_date', 'date', 'total_swe_volume_km3'])
+    fig = make_climatology_figure(clim_df, empty_current, 'Columbia River Basin', 2026)
+    # 3 band pairs (6) + median (1), no current-year line
+    assert len(fig.data) == 7
+    assert all(t.name != 'WY2026' for t in fig.data)
+
+
+def test_make_climatology_figure_empty_clim_shows_annotation(clim_current_df):
+    from charts import make_climatology_figure
+    empty = pd.DataFrame(columns=['dow', 'ref_date', 'min', 'p10', 'p25',
+                                   'p50', 'p75', 'p90', 'max', 'n'])
+    fig = make_climatology_figure(empty, clim_current_df, 'Columbia River Basin', 2026)
+    assert len(fig.data) == 0
+    assert len(fig.layout.annotations) == 1
+    assert 'history' in fig.layout.annotations[0].text.lower()
+
+
+def test_make_climatology_figure_current_year_maf_and_style(clim_df, clim_current_df):
+    from charts import make_climatology_figure, _CURRENT_YEAR_COLOR, _KM3_TO_MAF
+    fig = make_climatology_figure(clim_df, clim_current_df, 'Columbia River Basin', 2026)
+    current = next(t for t in fig.data if t.name == 'WY2026')
+    assert list(current.y) == pytest.approx([v * _KM3_TO_MAF for v in [3.2, 4.1, 5.5]])
+    assert current.line.color == _CURRENT_YEAR_COLOR
+
+
+def test_make_climatology_figure_median_dashed(clim_df, clim_current_df):
+    from charts import make_climatology_figure
+    fig = make_climatology_figure(clim_df, clim_current_df, 'Columbia River Basin', 2026)
+    median = next(t for t in fig.data if t.name == 'Median')
+    assert median.line.dash == 'dash'
+
+
+def test_make_climatology_figure_yaxis_title(clim_df, clim_current_df):
+    from charts import make_climatology_figure
+    fig = make_climatology_figure(clim_df, clim_current_df, 'Columbia River Basin', 2026)
+    assert 'MAF' in fig.layout.yaxis.title.text
+
+
+def test_make_climatology_figure_summary_in_title(clim_df, clim_current_df):
+    from charts import make_climatology_figure
+    summary = {
+        'pct_of_median': 92.0,
+        'rank_from_bottom': 5,
+        'total_years': 22,
+        'as_of': pd.Timestamp('2026-01-15'),
+    }
+    fig = make_climatology_figure(clim_df, clim_current_df, 'Columbia River Basin', 2026, summary)
+    assert '92% of median' in fig.layout.title.text
+    assert 'ranked 5 of 22' in fig.layout.title.text

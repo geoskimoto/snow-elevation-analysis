@@ -15,10 +15,10 @@
   },
   "files": {
     "requirements.txt": {
-      "checksum": "9513e600ac2e8d730a9898ce2a3e97a7"
+      "checksum": "98c8aff7eab515b403c4cdb236807d5b"
     },
     ".gitignore": {
-      "checksum": "91d0d9d65727f2258d320829c66a4f86"
+      "checksum": "1116d93e4b7e8671ce85a3c49fea7b4f"
     },
     "app.py": {
       "checksum": "5e8b040f0a02d2425ca3331f7d661910"
@@ -33,13 +33,16 @@
       "checksum": "6300544debfa55eae296fcb9a67b3c99"
     },
     "callbacks.py": {
-      "checksum": "195b920ee8129b2013f26e8f56212d58"
+      "checksum": "a6cea760841111b77354578f3e3d2864"
     },
     "charts.py": {
-      "checksum": "6d0444e5701f7b652c6c3e39b1c5422b"
+      "checksum": "bc6ba0c6eeba6acc7ff0d9d3da644a79"
+    },
+    "climatology.py": {
+      "checksum": "fd1db81de43a0b1d0f368699e4e4a3ef"
     },
     "config.py": {
-      "checksum": "c623d064af74e2a1e196877aeafc14f1"
+      "checksum": "80e4f9753a8e4adecb8e9a926c7cf076"
     },
     "data/basemaps/huc2_pnw.geojson": {
       "checksum": "d36f9cb810aa6b1215074b40c1d95d6e"
@@ -66,7 +69,7 @@
       "checksum": "a42663815d1c4d009fc85b08733ddfa2"
     },
     "layout.py": {
-      "checksum": "964dd1af9af13bf9c16390b184a0708c"
+      "checksum": "353fc1e32358cb12c43172385daaa84e"
     },
     "logs/.gitkeep": {
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"
@@ -81,10 +84,10 @@
       "checksum": "26046e594142adab48ca9a5757dadee5"
     },
     "populate_timeseries.py": {
-      "checksum": "3578734823ce6fbe6ce3e82e2c90f10f"
+      "checksum": "5749f8d3b1fa0fa671ace0187171e14a"
     },
     "snodas_fetcher.py": {
-      "checksum": "42450e56017a14ed552e479ab4b9cba9"
+      "checksum": "955c235a3bfd36dce7253ffe9bb2bb4e"
     },
     "tests/__init__.py": {
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"
@@ -102,13 +105,16 @@
       "checksum": "9a89674c68f15706e246acbb63c89b8c"
     },
     "tests/test_callbacks.py": {
-      "checksum": "3547c403eff5df32f3b11df6b393a6cd"
+      "checksum": "c2d75e2db9ac7bcc186d19c567dc706c"
     },
     "tests/test_charts.py": {
-      "checksum": "90c07f4a99f9f0ad3f57076a6c890c85"
+      "checksum": "fe6a378df2cfa42b78e22e5f2bb86745"
+    },
+    "tests/test_climatology.py": {
+      "checksum": "a8bbc3dd198ecba3ab2f1bf14fa4b444"
     },
     "tests/test_config.py": {
-      "checksum": "f595cad28091d60f336ea8359a9e56ba"
+      "checksum": "51e36d17e32ad3745aacb3bec1d748eb"
     },
     "tests/test_dem_processor.py": {
       "checksum": "aa88ab8cf554756f4f73a015d2f8acd2"
@@ -120,7 +126,7 @@
       "checksum": "61e78428a4dde2718c497d11f7c82d16"
     },
     "tests/test_layout.py": {
-      "checksum": "fa2729ca4e4807968ccadb3aaec1c4a6"
+      "checksum": "ccab5cc884efe4b47eadb547c149030a"
     },
     "tests/test_login_routes.py": {
       "checksum": "e87d5aad6d1e56eef51e4e3f993327df"
@@ -134,8 +140,11 @@
     "tests/test_plotter.py": {
       "checksum": "6ab54eddecd3a3a5e3652ce3e2e75392"
     },
+    "tests/test_populate_timeseries.py": {
+      "checksum": "504a0e20c38e069ad0d17cd351c690b6"
+    },
     "tests/test_snodas_fetcher.py": {
-      "checksum": "ff8e1e7ae011dd1dd5f15a85555c383d"
+      "checksum": "34f3c83733d1def590539500db140b7c"
     },
     "tests/test_sso_integration.py": {
       "checksum": "c1ab9f95b51ec1d4248f9d698aa20906"
@@ -147,7 +156,7 @@
       "checksum": "567a33403485bdc0cbdd75489021e30e"
     },
     "update_timeseries.py": {
-      "checksum": "e6dd78dad8244e8b8ea48108e2ca99c2"
+      "checksum": "b9d2e7100bb1a228bfad967b55cc9b17"
     },
     "wsgi.py": {
       "checksum": "e1fce3dcde8e0fdf8c5acdb17bb13610"

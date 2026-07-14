@@ -131,6 +131,42 @@ def get_layout() -> html.Div:
                                       config={'displayModeBar': False}),
                         ], style={'padding': '1rem'}),
                     ]),
+                    dcc.Tab(label='Historical', value='historical', children=[
+                        html.Div([
+                            html.Div([
+                                html.Label('Basin', style={'fontWeight': 'bold',
+                                           'fontSize': '0.85rem', 'marginRight': '0.5rem'}),
+                                dcc.Dropdown(
+                                    id='historical-basin',
+                                    options=[{'label': 'Columbia River Basin',
+                                              'value': 'Columbia River Basin'}],
+                                    value='Columbia River Basin',
+                                    clearable=False,
+                                    style={'width': '320px', 'fontSize': '0.85rem'},
+                                ),
+                            ], style={'display': 'flex', 'alignItems': 'center',
+                                      'marginBottom': '0.6rem'}),
+                            html.Div(id='historical-summary',
+                                     style={'fontSize': '0.85rem', 'color': '#555',
+                                            'marginBottom': '0.5rem', 'minHeight': '1.2rem'}),
+                            dcc.Graph(id='climatology-graph', className='timeseries-graph',
+                                      style={'height': '60vh'}, responsive=True,
+                                      config={'displayModeBar': False}),
+                            html.Div([
+                                html.P([
+                                    'Shaded bands show the historical distribution across all '
+                                    'available water years (widest = min–max, then 10–90th and '
+                                    '25–75th percentiles); the dashed line is the daily median and '
+                                    'the bold orange line is the current water year. Percentiles '
+                                    'align on day-of-water-year (Feb 29 omitted).',
+                                ], style={'margin': '0'}),
+                            ], style={
+                                'fontSize': '0.75rem', 'color': '#666', 'lineHeight': '1.5',
+                                'borderTop': '1px solid #ddd', 'paddingTop': '0.6rem',
+                                'marginTop': '0.5rem',
+                            }),
+                        ], style={'padding': '1rem'}),
+                    ]),
                 ]),
             ], className='chart-area', style={'flex': '1', 'padding': '1.2rem', 'overflowY': 'auto'}),
 

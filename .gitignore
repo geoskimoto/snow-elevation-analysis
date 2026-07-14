@@ -8,7 +8,8 @@ data/cache/*
 !data/cache/dem/
 data/cache/dem/*
 !data/cache/dem/columbia_basin_swe_aligned.tif
-# Ship the trends timeseries snapshot too; refresh with:
+# Ship the timeseries snapshots too — the Trends tab reads the current WY and
+# the Historical tab reads the full WY* set (all ~1 MB). Refresh with:
 #   git add -f data/cache/timeseries/ && git commit && git push
 !data/cache/timeseries/
 output/

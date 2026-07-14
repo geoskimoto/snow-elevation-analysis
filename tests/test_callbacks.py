@@ -134,3 +134,59 @@ def test_trends_tab_not_selected_returns_empty_figures():
     assert isinstance(huc4_fig, go.Figure)
     assert len(basin_fig.data) == 0
     assert len(huc4_fig.data) == 0
+
+
+# ---------------------------------------------------------------------------
+# Historical tab — build_historical_view
+# ---------------------------------------------------------------------------
+
+def _multi_year_df(n_years: int, basin: str = 'Columbia River Basin') -> pd.DataFrame:
+    """Daily volume rows for n_years historical WYs plus a partial current WY."""
+    import numpy as np
+    rows = []
+    hist_wys = list(range(2026 - n_years, 2026))
+    for wy in hist_wys:
+        for d in pd.date_range(f'{wy - 1}-10-01', f'{wy}-09-30', freq='D'):
+            base = 5 + 4 * np.sin((d.dayofyear / 365) * 2 * np.pi)
+            rows.append({'date': d, 'basin': basin,
+                         'total_swe_volume_km3': max(0.0, base), 'wy': wy})
+    for d in pd.date_range('2025-10-01', '2026-01-15', freq='D'):
+        base = 5 + 4 * np.sin((d.dayofyear / 365) * 2 * np.pi)
+        rows.append({'date': d, 'basin': basin,
+                     'total_swe_volume_km3': max(0.0, base - 1.0), 'wy': 2026})
+    return pd.DataFrame(rows)
+
+
+def test_historical_view_empty_df_returns_annotation():
+    from callbacks import build_historical_view
+    empty = pd.DataFrame(columns=['date', 'basin', 'total_swe_volume_km3', 'wy'])
+    fig, caption = build_historical_view(empty, wy=2026, basin='Columbia River Basin')
+    assert len(fig.data) == 0
+    assert caption == ''
+    assert 'No data yet' in fig.layout.annotations[0].text
+
+
+def test_historical_view_insufficient_years_returns_annotation():
+    from callbacks import build_historical_view
+    df = _multi_year_df(n_years=2)  # below MIN_YEARS_FOR_ENVELOPE (3)
+    fig, caption = build_historical_view(df, wy=2026, basin='Columbia River Basin')
+    assert len(fig.data) == 0
+    assert caption == ''
+    assert 'Not enough history' in fig.layout.annotations[0].text
+
+
+def test_historical_view_builds_envelope_with_enough_years():
+    from callbacks import build_historical_view
+    df = _multi_year_df(n_years=5)
+    fig, caption = build_historical_view(df, wy=2026, basin='Columbia River Basin')
+    # 3 band pairs (6) + median (1) + current year (1)
+    assert len(fig.data) == 8
+    assert 'Envelope from 5 water years' in caption
+    assert 'WY2026' in caption
+
+
+def test_historical_view_defaults_basin_when_none():
+    from callbacks import build_historical_view
+    df = _multi_year_df(n_years=5)
+    fig, caption = build_historical_view(df, wy=2026, basin=None)
+    assert len(fig.data) == 8

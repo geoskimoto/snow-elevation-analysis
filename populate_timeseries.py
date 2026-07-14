@@ -8,12 +8,16 @@ script then continues with the next date rather than aborting.
 
 Usage
 -----
-    python populate_timeseries.py [--start YYYY-MM-DD]
+    python populate_timeseries.py [--start YYYY-MM-DD] [--discard-raster]
 
 Options
 -------
 --start YYYY-MM-DD   Override the default start date of 2025-10-01.
                      Useful for resuming a partial run.
+--discard-raster     Delete each CONUS SWE GeoTIFF once its bands are computed.
+                     Recommended for the full-record backfill so the run does
+                     not accumulate ~65 GB of intermediate rasters; the volume
+                     parquet the climatology/trends tabs need is unaffected.
 
 Exit codes
 ----------
@@ -91,8 +95,15 @@ def _process_date(
     huc2,
     huc4,
     logger: logging.Logger,
+    discard_raster: bool = False,
 ) -> bool:
-    """Process a single date.  Returns True on success, False on failure."""
+    """Process a single date.  Returns True on success, False on failure.
+
+    When *discard_raster* is set, the cached CONUS SWE GeoTIFF is deleted once
+    its elevation bands have been computed.  The climatology/trends features
+    only need the (tiny) volume parquet, so this keeps the full-record backfill
+    from parking ~65 GB of intermediate rasters on disk.
+    """
     date_key = target.strftime('%Y%m%d')
     dt = datetime(target.year, target.month, target.day)
 
@@ -129,6 +140,9 @@ def _process_date(
 
         save_band_cache(bands_by_basin, date_key, cache_dir)
         append_volumes(dt, bands_by_basin, cache_dir)
+        if discard_raster:
+            swe_tif.unlink(missing_ok=True)
+            logger.debug('%s  discarded raster %s', target, swe_tif.name)
         logger.info('%s  OK  (%d basins)', target, len(bands_by_basin))
         return True
 
@@ -149,6 +163,12 @@ def main() -> None:
         metavar='YYYY-MM-DD',
         default=_DEFAULT_START.isoformat(),
         help='First date to process (default: 2025-10-01)',
+    )
+    parser.add_argument(
+        '--discard-raster',
+        action='store_true',
+        help='Delete each CONUS SWE GeoTIFF after its bands are computed '
+             '(keeps a full-record backfill from accumulating ~65 GB of rasters).',
     )
     args = parser.parse_args()
 
@@ -184,7 +204,8 @@ def main() -> None:
     while current <= yesterday:
         idx += 1
         logger.debug('--- [%d/%d] %s ---', idx, total_dates, current)
-        ok = _process_date(current, cache_dir, dem_cache, huc2, huc4, logger)
+        ok = _process_date(current, cache_dir, dem_cache, huc2, huc4, logger,
+                           discard_raster=args.discard_raster)
         if not ok:
             failed.append(current)
         current += timedelta(days=1)
