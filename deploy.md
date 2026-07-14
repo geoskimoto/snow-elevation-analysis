@@ -5,9 +5,16 @@ This app runs in **two** environments with very different capabilities:
 | | Your server | Posit Connect |
 |---|---|---|
 | Serves the Dash app | ✅ | ✅ |
+| App authentication | streamflows SSO via `streamflows_auth` (`protect_app` in `app.py`) | **none** — no app-specific auth; access is gated by Posit itself |
 | Can run scheduled jobs (cron/systemd) | ✅ | ❌ |
 | Runs the SNODAS backfill / daily update | ✅ (data factory) | ❌ (read-only viewer) |
 | Deploy mechanism | `./deploy.sh` (systemd + gunicorn) | git-backed publish via `manifest.json` |
+
+> **Auth model:** `app.py` wraps the server with `streamflows_auth.protect_app`,
+> which is the login/SSO layer on your server. On Posit Connect there is no
+> app-level authentication — rely on Posit's own access controls. Note
+> `streamflows_auth` is deployment-only and absent from a bare checkout, so
+> local dev bypasses it (see the run-app skill / `.claude/skills/run-app/`).
 
 The design keeps the two in sync through **git**: the server produces the small
 committed volume parquets, and Posit serves whatever is committed. Because the
