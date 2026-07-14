@@ -4,7 +4,10 @@ import pytest
 import jwt as pyjwt
 from datetime import datetime, timedelta, timezone
 
-os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-pytest-32bytes!!")
+# Force-assign (not setdefault): test_populate_timeseries imports
+# populate_timeseries, whose module-level load_dotenv() exports the real
+# JWT_SECRET from .env before this file runs in a full-suite pass.
+os.environ["JWT_SECRET"] = "test-jwt-secret-for-pytest-32bytes!!"
 os.environ.setdefault("AUTH_LOGIN_URL", "https://apps.streamflows.org/login")
 os.environ.setdefault("AUTH_PORTAL_URL", "https://apps.streamflows.org/")
 os.environ.setdefault("CACHE_DIR", "/tmp/snow_elevation_test_cache")
