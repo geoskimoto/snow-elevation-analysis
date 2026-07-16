@@ -226,3 +226,44 @@ class TestLoadTimeseriesFileExists:
         timeseries.append_volumes(date, {'Columbia River Basin': _make_bands_df()}, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
         assert pd.api.types.is_float_dtype(df['total_swe_volume_km3'])
+
+
+# ---------------------------------------------------------------------------
+# load_timeseries ordering
+# ---------------------------------------------------------------------------
+
+class TestLoadTimeseriesOrdering:
+    """Rows are appended in run order, so an out-of-order backfill must still
+    load chronologically -- charts plot rows in array order."""
+
+    def test_backfilled_date_loads_chronologically(self, tmp_path):
+        # Analyze March first, then backfill January (the reported scenario).
+        for day in (datetime(2026, 3, 1), datetime(2026, 1, 15)):
+            timeseries.append_volumes(day, {'Columbia River Basin': _make_bands_df()}, tmp_path)
+
+        df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
+
+        assert list(df['date']) == [pd.Timestamp('2026-01-15'), pd.Timestamp('2026-03-01')]
+
+    def test_each_basin_is_chronological(self, tmp_path):
+        bands = _make_bands_df()
+        for day in (datetime(2026, 3, 1), datetime(2026, 1, 15), datetime(2026, 2, 1)):
+            timeseries.append_volumes(
+                day,
+                {'Columbia River Basin': bands, 'Yakima': bands},
+                tmp_path,
+            )
+
+        df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
+
+        for basin in ('Columbia River Basin', 'Yakima'):
+            dates = df[df['basin'] == basin]['date']
+            assert dates.is_monotonic_increasing, f'{basin} rows are not chronological'
+
+    def test_index_is_contiguous_after_sort(self, tmp_path):
+        for day in (datetime(2026, 3, 1), datetime(2026, 1, 15)):
+            timeseries.append_volumes(day, {'Columbia River Basin': _make_bands_df()}, tmp_path)
+
+        df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
+
+        assert list(df.index) == [0, 1]

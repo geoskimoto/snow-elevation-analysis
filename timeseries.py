@@ -116,13 +116,14 @@ def append_volumes(date: datetime, bands_by_basin: dict[str, pd.DataFrame], cach
 
 
 def load_timeseries(wy: int, cache_dir: Path) -> pd.DataFrame:
-    """Read the WY parquet and return a DataFrame.
+    """Read the WY parquet and return a DataFrame sorted by (basin, date).
 
     Returns
     -------
     pd.DataFrame
         Columns: ``date`` (datetime64), ``basin`` (str),
-        ``total_swe_volume_km3`` (float).
+        ``total_swe_volume_km3`` (float), sorted by ``basin`` then ``date``
+        so callers can plot rows in array order.
         Returns an empty DataFrame with those columns if the file does not
         exist.
     """
@@ -132,4 +133,7 @@ def load_timeseries(wy: int, cache_dir: Path) -> pd.DataFrame:
 
     df = pd.read_parquet(path)
     df['date'] = pd.to_datetime(df['date'])
+    # Rows land in the parquet in the order analyses were run, so a backfilled
+    # date can trail a later one. Plotly connects points in array order.
+    df = df.sort_values(['basin', 'date']).reset_index(drop=True)
     return df[_COLUMNS]
