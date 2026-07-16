@@ -1,5 +1,15 @@
 # snow_elevation_plot — Project Notes
 
+## File ownership
+
+All files and directories in this project must be owned by
+`geoskimoto:geoskimoto`. Agents and cron jobs sometimes run as root — after
+any root-run operation that creates or modifies files here (including inside
+`.git/`), restore ownership with
+`sudo chown -R geoskimoto:geoskimoto /home/geoskimoto/projects/snow_elevation_plot`.
+Root-owned files break geoskimoto's git operations, venv installs, and cron
+jobs.
+
 Dash app that plots SNODAS snow-water-equivalent by elevation band for
 Columbia Basin HUC2/HUC4 basins. Data layer in `snodas_fetcher.py`,
 `pipeline.py`, `timeseries.py`; charts in `charts.py`; Dash callbacks in
