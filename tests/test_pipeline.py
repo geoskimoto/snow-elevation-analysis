@@ -144,3 +144,43 @@ def test_run_pipeline_progress_called(tmp_path, sample_bands_by_basin):
     pcts = [c[0] for c in progress_calls]
     assert pcts == sorted(pcts)
     assert pcts[-1] == 100
+
+
+def test_band_cache_swann_routes_to_subdir(tmp_path):
+    import pandas as pd
+    from pipeline import save_band_cache, load_band_cache
+
+    bands = {"Columbia River Basin": pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [0.005],
+    })}
+    save_band_cache(bands, "20260115", tmp_path, dataset="swann")
+    assert (tmp_path / "bands" / "swann" / "20260115_250m.parquet").exists()
+    assert not (tmp_path / "bands" / "20260115_250m.parquet").exists()
+
+    loaded = load_band_cache("20260115", tmp_path, dataset="swann")
+    assert "Columbia River Basin" in loaded
+    assert load_band_cache("20260115", tmp_path) is None  # snodas view empty
+
+
+def test_run_pipeline_routes_fetcher_by_dataset(tmp_path, monkeypatch):
+    """run_pipeline(dataset='swann') must call the SWANN fetcher, not SNODAS."""
+    import pipeline
+    import datasets
+
+    called = {}
+
+    def fake_swann_fetch(date, cache_dir):
+        called["swann"] = True
+        raise ConnectionError("stop here — routing verified")
+
+    def fake_snodas_fetch(date, cache_dir):
+        called["snodas"] = True
+        raise ConnectionError("stop here")
+
+    monkeypatch.setitem(datasets.DATASETS["swann"], "fetch_swe", fake_swann_fetch)
+    monkeypatch.setitem(datasets.DATASETS["snodas"], "fetch_swe", fake_snodas_fetch)
+
+    result = pipeline.run_pipeline("2026-01-15", dataset="swann")
+    assert called == {"swann": True}
+    assert result["error"] is not None
