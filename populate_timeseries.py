@@ -229,6 +229,21 @@ def _swann_process_day(swe_tif: Path, dem_tif: Path, dt: datetime,
     append_volumes(dt, bands_by_basin, cache_dir, dataset='swann')
 
 
+def _swann_needed_dates(wy: int, start: date, end: date) -> list[date]:
+    """Dates within water-year *wy* that fall inside the [start, end]
+    backfill window (inclusive)."""
+    wy_start = date(wy - 1, 10, 1)
+    wy_end = date(wy, 9, 30)
+    range_start = max(start, wy_start)
+    range_end = min(end, wy_end)
+    needed = []
+    d = range_start
+    while d <= range_end:
+        needed.append(d)
+        d += timedelta(days=1)
+    return needed
+
+
 def _run_swann_backfill(start: date, end: date, cache_dir: Path,
                         huc2, huc4, logger: logging.Logger,
                         discard: bool) -> list[date]:
@@ -244,62 +259,80 @@ def _run_swann_backfill(start: date, end: date, cache_dir: Path,
 
     for wy in range(first_wy, last_wy + 1):
         done = _swann_dates_done(wy, cache_dir, n_basins)
+        needed = _swann_needed_dates(wy, start, end)
+
+        # Resume support: if every date this year needs is already recorded,
+        # skip the year entirely — no reason to re-fetch a ~95 MB bulk file
+        # (or hit the daily endpoint) for work that's already done.
+        if needed and all(d in done for d in needed):
+            logger.info('WY%d  SKIP (all %d dates already recorded)', wy, len(needed))
+            continue
+        if not needed:
+            continue
+
         try:
             wy_nc = swann_fetcher.download_wy_nc(wy, cache_dir / 'swann')
         except FileNotFoundError:
             wy_nc = None       # no bulk file (WY2024+): daily-file mode
         except ConnectionError as exc:
             logger.error('WY%d  bulk download failed: %s — skipping year', wy, exc)
-            wy_start = date(wy - 1, 10, 1)
-            failed.extend([wy_start])   # marker; details in log
+            failed.append(date(wy - 1, 10, 1))   # marker; details in log
             continue
 
-        if wy_nc is not None:
-            logger.info('WY%d  bulk file mode (%s)', wy, wy_nc.name)
-            sd = f'netcdf:{wy_nc}:SWE'
-            with rasterio.open(sd) as src:
-                band_dates = parse_time_values(src.tags())
-                n_bands = src.count
-            if len(band_dates) != n_bands:
-                logger.error('WY%d  time axis mismatch (%d dates, %d bands) — skipping',
-                             wy, len(band_dates), n_bands)
-                failed.append(date(wy - 1, 10, 1))
-                continue
-            for band_idx, dt in enumerate(band_dates, start=1):
-                d = dt.date()
-                if d < start or d > end or d in done:
+        # Per-year cleanup (tmp extract tif always; downloaded WY netCDF when
+        # --discard-raster) must run on every exit path from this year's
+        # processing, including the time-axis-mismatch early-out below —
+        # otherwise a mismatched year silently retains a ~95 MB netCDF.
+        try:
+            if wy_nc is not None:
+                logger.info('WY%d  bulk file mode (%s)', wy, wy_nc.name)
+                sd = f'netcdf:{wy_nc}:SWE'
+                with rasterio.open(sd) as src:
+                    band_dates = parse_time_values(src.tags())
+                    n_bands = src.count
+                if len(band_dates) != n_bands:
+                    logger.error('WY%d  time axis mismatch (%d dates, %d bands) — skipping',
+                                 wy, len(band_dates), n_bands)
+                    failed.append(date(wy - 1, 10, 1))
                     continue
-                try:
-                    swann_fetcher.nc_to_geotiff(wy_nc, tmp_tif, variable='SWE',
-                                                band=band_idx)
-                    dem_tif = get_aligned_dem(tmp_tif, dem_cache=dem_cache)
-                    _swann_process_day(tmp_tif, dem_tif, dt, huc2, huc4, cache_dir)
-                    logger.info('%s  OK (WY file band %d)', d, band_idx)
-                except Exception as exc:
-                    logger.error('%s  ERROR: %s', d, exc)
-                    failed.append(d)
-            tmp_tif.unlink(missing_ok=True)
-            if discard:
-                wy_nc.unlink(missing_ok=True)
-                logger.debug('WY%d  discarded %s', wy, wy_nc.name)
-        else:
-            logger.info('WY%d  daily file mode (no bulk file)', wy)
-            d = max(start, date(wy - 1, 10, 1))
-            wy_end = min(end, date(wy, 9, 30))
-            while d <= wy_end:
-                if d not in done:
+                for band_idx, dt in enumerate(band_dates, start=1):
+                    d = dt.date()
+                    if d < start or d > end or d in done:
+                        continue
+                    try:
+                        swann_fetcher.nc_to_geotiff(wy_nc, tmp_tif, variable='SWE',
+                                                    band=band_idx)
+                        dem_tif = get_aligned_dem(tmp_tif, dem_cache=dem_cache)
+                        _swann_process_day(tmp_tif, dem_tif, dt, huc2, huc4, cache_dir)
+                        logger.info('%s  OK (WY file band %d)', d, band_idx)
+                    except Exception as exc:
+                        logger.error('%s  ERROR: %s', d, exc)
+                        failed.append(d)
+            else:
+                logger.info('WY%d  daily file mode (no bulk file)', wy)
+                for d in needed:
+                    if d in done:
+                        continue
                     dt = datetime(d.year, d.month, d.day)
+                    swe_tif = None
                     try:
                         swe_tif = swann_fetcher.fetch_swe(dt, cache_dir=cache_dir)
                         dem_tif = get_aligned_dem(swe_tif, dem_cache=dem_cache)
                         _swann_process_day(swe_tif, dem_tif, dt, huc2, huc4, cache_dir)
-                        if discard:
-                            swe_tif.unlink(missing_ok=True)
                         logger.info('%s  OK (daily file)', d)
                     except Exception as exc:
                         logger.error('%s  ERROR: %s', d, exc)
                         failed.append(d)
-                d += timedelta(days=1)
+                    finally:
+                        # Discard on every exit path (success or failure) —
+                        # a failed day must not leak its fetched raster.
+                        if discard and swe_tif is not None:
+                            swe_tif.unlink(missing_ok=True)
+        finally:
+            tmp_tif.unlink(missing_ok=True)
+            if discard and wy_nc is not None:
+                wy_nc.unlink(missing_ok=True)
+                logger.debug('WY%d  discarded %s', wy, wy_nc.name)
     return failed
 
 
