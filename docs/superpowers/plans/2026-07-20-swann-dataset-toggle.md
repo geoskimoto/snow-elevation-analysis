@@ -1108,7 +1108,7 @@ def build_historical_view(df, wy: int, basin: str | None,
         ds = datasets.get(dataset)
         return [html.P([html.Strong('Data: '), ds['footnote']],
                        style={'margin': '0'})]
-    ```
+```
 
 8. Downloads — both `download_pngs` and `download_html` read the dataset from the store (`store_data.get('dataset', 'snodas')`), pass it to `timeseries.load_timeseries(..., dataset=...)` and `charts.make_*_timeseries_figure(..., dataset_label=ds['label'])`, name the zip `f'snow_analysis_{dataset}.zip'` / html `f'snow_analysis_{dataset}_{date_str}.html'`, and the HTML footnote uses `ds['footnote']` instead of the hardcoded SNODAS text.
 
