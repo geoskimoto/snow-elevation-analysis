@@ -5,15 +5,17 @@ Where :mod:`timeseries` handles a single water year, this module aggregates
 per-day percentile envelope (min/10/25/median/75/90/max) that the Historical
 tab draws with the current water year overlaid on top.
 
-Everything here is a pure read of the committed
-``{cache_dir}/timeseries/WY*_volume.parquet`` snapshots — no SNODAS fetch, no
-cache writes — so it behaves identically on the scheduled server and on Posit
-Connect (which cannot run jobs).
+Everything here is a pure read of the committed parquet snapshots — no SNODAS
+fetch, no cache writes — so it behaves identically on the scheduled server
+and on Posit Connect (which cannot run jobs). Dataset routing: 'snodas' reads
+{cache_dir}/timeseries/WY*.parquet; other datasets read
+{cache_dir}/timeseries/{dataset}/WY*.parquet.
 
 Functions
 ---------
-load_all_water_years(cache_dir)
-                          -- concat every WY parquet, tagging rows with `wy`.
+load_all_water_years(cache_dir, dataset='snodas')
+                          -- concat every WY parquet in the dataset subdir,
+                             tagging rows with `wy`.
 day_of_water_year(date)   -- 1..365 position within the water year
                              (Oct 1 -> 1); Feb 29 returns None so leap and
                              non-leap years align on a common (month, day) axis.
@@ -129,8 +131,17 @@ def water_day_ref(dow: int) -> pd.Timestamp:
     return pd.Timestamp(_REF_WY_START + timedelta(days=int(dow) - 1))
 
 
-def load_all_water_years(cache_dir: Path) -> pd.DataFrame:
+def load_all_water_years(cache_dir: Path, dataset: str = 'snodas') -> pd.DataFrame:
     """Concatenate every ``WY*_volume.parquet`` under *cache_dir*.
+
+    Parameters
+    ----------
+    cache_dir:
+        Root cache directory.
+    dataset:
+        Dataset key ('snodas' or 'swann'). Default: 'snodas'.
+        Routing rule: 'snodas' reads {cache_dir}/timeseries/WY*.parquet;
+        other datasets read {cache_dir}/timeseries/{dataset}/WY*.parquet.
 
     Returns
     -------
@@ -139,6 +150,8 @@ def load_all_water_years(cache_dir: Path) -> pd.DataFrame:
         columns) if no parquet files exist.
     """
     ts_dir = Path(cache_dir) / 'timeseries'
+    if dataset != 'snodas':
+        ts_dir = ts_dir / dataset
     if not ts_dir.exists():
         return _empty_df()
 

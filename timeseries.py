@@ -3,12 +3,15 @@
 Functions
 ---------
 water_year(date)          -- return water-year integer for a datetime
-append_volumes(date, bands_by_basin, cache_dir)
+append_volumes(date, bands_by_basin, cache_dir, dataset='snodas')
                           -- sum total_swe_volume_km3 per basin and append to
                              the WY parquet; idempotent on (date, basin).
-load_timeseries(wy, cache_dir)
+load_timeseries(wy, cache_dir, dataset='snodas')
                           -- read the WY parquet; return empty DataFrame if
                              the file does not exist.
+
+Dataset routing: 'snodas' uses {cache_dir}/timeseries/WY*.parquet;
+other datasets use {cache_dir}/timeseries/{dataset}/WY*.parquet.
 """
 
 from datetime import datetime
@@ -24,8 +27,13 @@ import pandas as pd
 _COLUMNS = ['date', 'basin', 'total_swe_volume_km3']
 
 
-def _parquet_path(wy: int, cache_dir: Path) -> Path:
-    return cache_dir / 'timeseries' / f'WY{wy}_volume.parquet'
+def _parquet_path(wy: int, cache_dir: Path, dataset: str = 'snodas') -> Path:
+    # Routing rule shared with climatology/pipeline: the default dataset keeps
+    # its historical location; any other dataset gets a subdir named after it.
+    base = cache_dir / 'timeseries'
+    if dataset != 'snodas':
+        base = base / dataset
+    return base / f'WY{wy}_volume.parquet'
 
 
 def _empty_df() -> pd.DataFrame:
@@ -52,7 +60,7 @@ def water_year(date: datetime) -> int:
     return date.year
 
 
-def append_volumes(date: datetime, bands_by_basin: dict[str, pd.DataFrame], cache_dir: Path) -> None:
+def append_volumes(date: datetime, bands_by_basin: dict[str, pd.DataFrame], cache_dir: Path, dataset: str = 'snodas') -> None:
     """Sum ``total_swe_volume_km3`` per basin and append one row per basin.
 
     Parameters
@@ -66,7 +74,11 @@ def append_volumes(date: datetime, bands_by_basin: dict[str, pd.DataFrame], cach
         keys are stored without filtering.
     cache_dir:
         Root cache directory.  The parquet is written to
-        ``{cache_dir}/timeseries/WY{wy}_volume.parquet``.
+        ``{cache_dir}/timeseries/WY{wy}_volume.parquet`` for 'snodas',
+        or ``{cache_dir}/timeseries/{dataset}/WY{wy}_volume.parquet`` for
+        other datasets.
+    dataset:
+        Dataset key ('snodas' or 'swann'). Default: 'snodas'.
 
     Idempotency
     -----------
@@ -74,7 +86,7 @@ def append_volumes(date: datetime, bands_by_basin: dict[str, pd.DataFrame], cach
     again.  Existing data is never modified.
     """
     wy = water_year(date)
-    path = _parquet_path(wy, cache_dir)
+    path = _parquet_path(wy, cache_dir, dataset)
 
     # Ensure parent directory exists
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -115,8 +127,17 @@ def append_volumes(date: datetime, bands_by_basin: dict[str, pd.DataFrame], cach
     combined.to_parquet(path, index=False)
 
 
-def load_timeseries(wy: int, cache_dir: Path) -> pd.DataFrame:
+def load_timeseries(wy: int, cache_dir: Path, dataset: str = 'snodas') -> pd.DataFrame:
     """Read the WY parquet and return a DataFrame sorted by (basin, date).
+
+    Parameters
+    ----------
+    wy:
+        Water year to load.
+    cache_dir:
+        Root cache directory.
+    dataset:
+        Dataset key ('snodas' or 'swann'). Default: 'snodas'.
 
     Returns
     -------
@@ -127,7 +148,7 @@ def load_timeseries(wy: int, cache_dir: Path) -> pd.DataFrame:
         Returns an empty DataFrame with those columns if the file does not
         exist.
     """
-    path = _parquet_path(wy, cache_dir)
+    path = _parquet_path(wy, cache_dir, dataset)
     if not path.exists():
         return _empty_df()
 

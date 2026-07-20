@@ -267,3 +267,24 @@ class TestLoadTimeseriesOrdering:
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
 
         assert list(df.index) == [0, 1]
+
+
+# ---------------------------------------------------------------------------
+# Dataset-aware routing
+# ---------------------------------------------------------------------------
+
+def test_append_and_load_swann_dataset_routes_to_subdir(tmp_path):
+    date = datetime(2026, 1, 15)
+    bands = {"Columbia River Basin": pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [0.005],
+    })}
+    timeseries.append_volumes(date, bands, tmp_path, dataset="swann")
+
+    assert (tmp_path / "timeseries" / "swann" / "WY2026_volume.parquet").exists()
+    # default (snodas) tree untouched
+    assert not (tmp_path / "timeseries" / "WY2026_volume.parquet").exists()
+
+    df = timeseries.load_timeseries(2026, tmp_path, dataset="swann")
+    assert len(df) == 1
+    assert timeseries.load_timeseries(2026, tmp_path).empty          # snodas view is empty

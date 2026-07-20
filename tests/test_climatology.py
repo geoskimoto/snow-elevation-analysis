@@ -182,3 +182,23 @@ class TestSummarizeCurrent:
             {'date': pd.Timestamp('2025-01-15'), 'basin': 'B', 'total_swe_volume_km3': 1.0, 'wy': 2025},
         ])
         assert climatology.summarize_current(df, 'B', current_wy=2026) is None
+
+
+# ---------------------------------------------------------------------------
+# Dataset-aware routing
+# ---------------------------------------------------------------------------
+
+def test_load_all_water_years_swann_reads_subdir_only(tmp_path):
+    import timeseries
+
+    bands = {"Columbia River Basin": pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [0.005],
+    })}
+    timeseries.append_volumes(datetime(1999, 1, 15), bands, tmp_path, dataset="swann")
+    timeseries.append_volumes(datetime(2026, 1, 15), bands, tmp_path)  # snodas
+
+    swann = climatology.load_all_water_years(tmp_path, dataset="swann")
+    assert sorted(swann["wy"].unique()) == [1999]
+    snodas = climatology.load_all_water_years(tmp_path)
+    assert sorted(snodas["wy"].unique()) == [2026]
