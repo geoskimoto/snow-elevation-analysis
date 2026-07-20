@@ -64,3 +64,35 @@ def test_discard_raster_flag_parsed():
     parser.add_argument('--discard-raster', action='store_true')
     assert parser.parse_args([]).discard_raster is False
     assert parser.parse_args(['--discard-raster']).discard_raster is True
+
+
+def test_parse_time_values_days_since_1900():
+    from datetime import datetime
+    import populate_timeseries
+
+    # Anchor pair verified against a live SWANN file on 2026-07-20:
+    # the daily file for 2026-01-15 carries NETCDF_DIM_time = 46035.
+    tags = {
+        "NETCDF_DIM_time_VALUES": "{46035,46036,46037}",
+        "time#units": "days since 1900-01-01 00:00:00",
+    }
+    dates = populate_timeseries.parse_time_values(tags)
+    assert dates[0] == datetime(2026, 1, 15)
+    assert dates[2] == datetime(2026, 1, 17)
+    assert len(dates) == 3
+
+
+def test_parse_time_values_rejects_unknown_units():
+    import pytest
+    import populate_timeseries
+
+    with pytest.raises(ValueError):
+        populate_timeseries.parse_time_values(
+            {"NETCDF_DIM_time_VALUES": "{1}", "time#units": "hours since 1900-01-01"})
+
+
+def test_dataset_arg_default_snodas():
+    import populate_timeseries
+    parser = populate_timeseries.build_parser()
+    assert parser.parse_args([]).dataset == "snodas"
+    assert parser.parse_args(["--dataset", "swann"]).dataset == "swann"
