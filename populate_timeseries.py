@@ -287,9 +287,18 @@ def _run_swann_backfill(start: date, end: date, cache_dir: Path,
             if wy_nc is not None:
                 logger.info('WY%d  bulk file mode (%s)', wy, wy_nc.name)
                 sd = f'netcdf:{wy_nc}:SWE'
-                with rasterio.open(sd) as src:
-                    band_dates = parse_time_values(src.tags())
-                    n_bands = src.count
+                try:
+                    with rasterio.open(sd) as src:
+                        band_dates = parse_time_values(src.tags())
+                        n_bands = src.count
+                except Exception as exc:
+                    # A corrupt/truncated WY netCDF (e.g. a partial download
+                    # left by a previously killed run — download_wy_nc returns
+                    # it without validation) must not abort the whole
+                    # multi-decade backfill; log the year and move on.
+                    logger.error('WY%d  YEAR ERROR: %s', wy, exc)
+                    failed.append(date(wy - 1, 10, 1))
+                    continue
                 if len(band_dates) != n_bands:
                     logger.error('WY%d  time axis mismatch (%d dates, %d bands) — skipping',
                                  wy, len(band_dates), n_bands)

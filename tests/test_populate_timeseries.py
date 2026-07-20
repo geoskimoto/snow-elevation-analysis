@@ -201,3 +201,41 @@ def test_swann_backfill_daily_fallback_cleans_up_failed_day(tmp_path):
 
     assert failed == [date(2024, 10, 1)]
     assert not swe_tif.exists(), 'failed day must still discard its fetched raster'
+
+
+def test_swann_backfill_corrupt_wy_file_does_not_abort_run(tmp_path):
+    """A corrupt/truncated WY netCDF (e.g. a partial download left by a
+    killed run — download_wy_nc returns it without validation) must not
+    raise out of _run_swann_backfill and kill the whole multi-decade run:
+    the year's metadata read failing is caught, logged to `failed`, and the
+    loop proceeds to the next water year."""
+    import rasterio.errors
+
+    start = date(2019, 1, 1)
+    end = date(2020, 1, 3)   # spans WY2019 and WY2020
+
+    huc4 = pd.DataFrame({'name': [], 'geometry': []})
+    logger = logging.getLogger('test_populate')
+
+    download_calls = []
+
+    def fake_download(wy, dest_dir):
+        download_calls.append(wy)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        stub = dest_dir / f'UA_SWE_Depth_WY{wy}.nc'
+        stub.write_bytes(b'truncated')  # corrupt stand-in
+        return stub
+
+    def fake_open(*args, **kwargs):
+        raise rasterio.errors.RasterioIOError('corrupt netCDF')
+
+    with patch.object(pt.swann_fetcher, 'download_wy_nc', side_effect=fake_download), \
+         patch.object(pt.rasterio, 'open', side_effect=fake_open):
+        failed = pt._run_swann_backfill(start, end, tmp_path, MagicMock(), huc4,
+                                        logger, discard=False)
+
+    # Both years are marked failed (metadata read raised for each) ...
+    assert date(2018, 10, 1) in failed
+    assert date(2019, 10, 1) in failed
+    # ... but the loop kept going past year 1: year 2's download was attempted.
+    assert download_calls == [2019, 2020]

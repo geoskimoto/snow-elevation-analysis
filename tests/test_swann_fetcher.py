@@ -69,6 +69,41 @@ def test_nc_to_geotiff_remaps_nodata_and_preserves_grid(synthetic_swann_nc, tmp_
         assert abs(d.transform.a - 0.0416667) < 1e-6
 
 
+def test_nc_to_geotiff_rejects_wrong_pixel_size(tmp_path):
+    """A grid resolution that drifted from the verified 0.0416667 deg SWANN
+    convention must fail loudly at ingest, not silently mis-scale downstream
+    elevation-band math."""
+    path = tmp_path / "wrong_res.nc"
+    data = np.array([[100, 200], [300, 400]], dtype=np.int16)
+    transform = from_origin(-125.0208, 49.9375, 0.008333, 0.008333)
+    with rasterio.open(
+        path, "w", driver="NETCDF",
+        height=2, width=2, count=1, dtype="int16",
+        crs="EPSG:4269", transform=transform, nodata=-999,
+    ) as dst:
+        dst.write(data, 1)
+
+    with pytest.raises(ValueError):
+        swann_fetcher.nc_to_geotiff(path, tmp_path / "out.tif", variable=None)
+
+
+def test_nc_to_geotiff_rejects_wrong_dtype(tmp_path):
+    """A source dtype other than int16 must fail loudly at ingest rather
+    than silently truncate/misread SWE values."""
+    path = tmp_path / "wrong_dtype.nc"
+    data = np.array([[100.0, 200.0], [300.0, 400.0]], dtype=np.float32)
+    transform = from_origin(-125.0208, 49.9375, 0.0416667, 0.0416667)
+    with rasterio.open(
+        path, "w", driver="NETCDF",
+        height=2, width=2, count=1, dtype="float32",
+        crs="EPSG:4269", transform=transform, nodata=-999.0,
+    ) as dst:
+        dst.write(data, 1)
+
+    with pytest.raises(ValueError):
+        swann_fetcher.nc_to_geotiff(path, tmp_path / "out.tif", variable=None)
+
+
 def test_fetch_swe_returns_cached_without_download(tmp_path, monkeypatch):
     date = datetime(2026, 1, 15)
     tif = swann_fetcher.cache_path(date, tmp_path)

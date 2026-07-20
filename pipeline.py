@@ -69,7 +69,7 @@ def run_pipeline(date_str: str, set_progress=None, dataset: str = 'snodas') -> d
         # ds['fetch_swe']) so that tests/test_pipeline.py's pre-existing
         # `patch('pipeline.fetch_swe', ...)` mocks keep working unmodified —
         # patching a dict value bound in datasets.py at import time wouldn't
-        # reach through a `ds['fetch_swe']` call. See task-3-report.md.
+        # reach through a `ds['fetch_swe']` call.
         fetch_fn = fetch_swe if dataset == 'snodas' else ds['fetch_swe']
         swe_tif = fetch_fn(date, cache_dir=cache_dir)
 

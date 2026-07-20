@@ -29,6 +29,8 @@ SWANN_TIMEOUT_S = 120
 SWANN_SRC_NODATA = -999
 OUT_NODATA = -9999          # SNODAS convention; lets compute_bands run unchanged
 SWANN_START = datetime(1981, 10, 1)
+SWANN_RES_DEG = 0.0416667   # ~4 km grid, verified live 2026-07-20
+SWANN_RES_TOL_DEG = 1e-4
 
 _SUFFIXES = ("stable", "provisional", "early")
 _DEFAULT_CACHE = Path(__file__).parent / "data" / "cache"
@@ -72,6 +74,31 @@ def nc_to_geotiff(nc_path: Path, tif_path: Path,
     """
     src_path = f"netcdf:{nc_path}:{variable}" if variable else str(nc_path)
     with rasterio.open(src_path) as src:
+        # Ingest validation — SWANN units/orientation/nodata conventions are
+        # verified before conversion; a drift here (grid change, reprojection,
+        # different nodata sentinel) must fail loudly rather than silently
+        # produce a mis-scaled or mis-oriented raster downstream.
+        if src.dtypes[0] != "int16":
+            raise ValueError(
+                f"SWANN ingest validation failed: expected dtype int16, "
+                f"got {src.dtypes[0]!r} ({nc_path})")
+        if src.nodata is not None and src.nodata != SWANN_SRC_NODATA:
+            raise ValueError(
+                f"SWANN ingest validation failed: expected nodata "
+                f"{SWANN_SRC_NODATA}, got {src.nodata!r} ({nc_path})")
+        if abs(abs(src.transform.a) - SWANN_RES_DEG) >= SWANN_RES_TOL_DEG:
+            raise ValueError(
+                f"SWANN ingest validation failed: expected pixel size "
+                f"~{SWANN_RES_DEG} deg (x), got {src.transform.a!r} ({nc_path})")
+        if abs(abs(src.transform.e) - SWANN_RES_DEG) >= SWANN_RES_TOL_DEG:
+            raise ValueError(
+                f"SWANN ingest validation failed: expected pixel size "
+                f"~{SWANN_RES_DEG} deg (y), got {src.transform.e!r} ({nc_path})")
+        if src.transform.e >= 0:
+            raise ValueError(
+                f"SWANN ingest validation failed: expected north-up raster "
+                f"(transform.e < 0), got {src.transform.e!r} ({nc_path})")
+
         arr = src.read(band).astype(np.int16)
         src_nodata = src.nodata if src.nodata is not None else SWANN_SRC_NODATA
         arr[arr == src_nodata] = OUT_NODATA
