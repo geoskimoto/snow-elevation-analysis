@@ -2,6 +2,8 @@ from datetime import date
 
 from dash import dcc, html
 
+import datasets
+
 
 def get_layout() -> html.Div:
     today = date.today().isoformat()
@@ -14,6 +16,17 @@ def get_layout() -> html.Div:
         html.Div([
             html.H2('Snow Elevation Analysis',
                     style={'margin': '0', 'color': '#333', 'fontSize': '1.2rem'}),
+            dcc.RadioItems(
+                id='dataset-select',
+                options=[
+                    {'label': datasets.get('snodas')['label'], 'value': 'snodas'},
+                    {'label': datasets.get('swann')['label'], 'value': 'swann'},
+                ],
+                value='snodas',
+                inline=True,
+                style={'fontSize': '0.85rem', 'color': '#333'},
+                inputStyle={'marginRight': '0.3rem', 'marginLeft': '0.9rem'},
+            ),
         ], style={
             'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center',
             'padding': '0.8rem 1.5rem', 'background': 'white',
@@ -29,6 +42,8 @@ def get_layout() -> html.Div:
                 dcc.DatePickerSingle(
                     id='date-picker',
                     date=today,
+                    min_date_allowed=datasets.get('snodas')['start'].date().isoformat(),
+                    max_date_allowed=today,
                     display_format='YYYY-MM-DD',
                     style={'marginBottom': '1rem'},
                 ),
@@ -102,15 +117,9 @@ def get_layout() -> html.Div:
                             html.Div([
                                 html.P([
                                     html.Strong('Data: '),
-                                    'NOAA SNODAS (~1 km daily gridded SWE). Assimilates SNOTEL/COOP ground stations '
-                                    'with meteorological model forcing. ',
-                                    html.Strong('Limitations: '),
-                                    'Station network thins above ~7,000 ft, leading to underestimation of deep '
-                                    'mountain snowpack (published bias: 20–40% low in high-elevation basins). '
-                                    'Glacier pixels are excluded. The SWE drop-off above ~6,500 ft likely reflects '
-                                    'both true late-season ablation on exposed terrain and SNODAS model skill degradation.',
+                                    datasets.get('snodas')['footnote'],
                                 ], style={'margin': '0'}),
-                            ], style={
+                            ], id='snowpack-footnote', style={
                                 'fontSize': '0.75rem', 'color': '#666', 'lineHeight': '1.5',
                                 'borderTop': '1px solid #ddd', 'paddingTop': '0.6rem',
                             }),

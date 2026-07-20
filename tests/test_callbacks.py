@@ -172,7 +172,7 @@ def test_historical_view_insufficient_years_returns_annotation():
     fig, caption = build_historical_view(df, wy=2026, basin='Columbia River Basin')
     assert len(fig.data) == 0
     assert caption == ''
-    assert 'Not enough history' in fig.layout.annotations[0].text
+    assert 'Not enough SNODAS (~1 km) history' in fig.layout.annotations[0].text
 
 
 def test_historical_view_builds_envelope_with_enough_years():
@@ -181,7 +181,7 @@ def test_historical_view_builds_envelope_with_enough_years():
     fig, caption = build_historical_view(df, wy=2026, basin='Columbia River Basin')
     # 3 band pairs (6) + median (1) + current year (1)
     assert len(fig.data) == 8
-    assert 'Envelope from 5 water years' in caption
+    assert 'SNODAS (~1 km) envelope from 5 water years' in caption
     assert 'WY2026' in caption
 
 
@@ -190,3 +190,30 @@ def test_historical_view_defaults_basin_when_none():
     df = _multi_year_df(n_years=5)
     fig, caption = build_historical_view(df, wy=2026, basin=None)
     assert len(fig.data) == 8
+
+
+def test_build_historical_view_swann_empty_names_backfill():
+    import callbacks
+    from climatology import _empty_df
+
+    fig, caption = callbacks.build_historical_view(
+        _empty_df(), 2026, "Columbia River Basin", dataset="swann")
+    text = fig.layout.annotations[0].text
+    assert "swann" in text.lower()
+    assert "--dataset swann" in text
+
+
+def test_build_historical_view_labels_dataset(tmp_path):
+    import pandas as pd
+    import callbacks
+
+    rows = []
+    for wy in (2004, 2005, 2006, 2007):
+        for day in ("01-10", "01-11", "01-12"):
+            rows.append({"date": pd.Timestamp(f"{wy}-{day}"),
+                         "basin": "Columbia River Basin",
+                         "total_swe_volume_km3": 1.0 + wy % 3, "wy": wy})
+    df = pd.DataFrame(rows)
+    fig, caption = callbacks.build_historical_view(
+        df, 2026, "Columbia River Basin", dataset="swann")
+    assert "SWANN (4 km)" in fig.layout.title.text
