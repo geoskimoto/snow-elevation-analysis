@@ -103,10 +103,10 @@ def run_pipeline(date_str: str, set_progress=None, dataset: str = 'snodas') -> d
 
         huc4_bands = {k: v for k, v in bands_by_basin.items() if k != _HUC2_KEY}
         huc2_df = bands_by_basin.get(_HUC2_KEY)
-        huc2_fig = make_huc2_figure(huc2_df, date) if huc2_df is not None else go.Figure()
-        huc4_fig = make_huc4_figure(huc4_bands, date)
-        huc2_vol_fig = make_huc2_volume_figure(huc2_df, date) if huc2_df is not None else go.Figure()
-        huc4_vol_fig = make_huc4_volume_figure(huc4_bands, date)
+        huc2_fig = make_huc2_figure(huc2_df, date, dataset_label=ds['label']) if huc2_df is not None else go.Figure()
+        huc4_fig = make_huc4_figure(huc4_bands, date, dataset_label=ds['label'])
+        huc2_vol_fig = make_huc2_volume_figure(huc2_df, date, dataset_label=ds['label']) if huc2_df is not None else go.Figure()
+        huc4_vol_fig = make_huc4_volume_figure(huc4_bands, date, dataset_label=ds['label'])
 
         return {
             'huc2_fig': huc2_fig,

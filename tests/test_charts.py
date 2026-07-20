@@ -314,3 +314,68 @@ def test_make_climatology_figure_summary_in_title(clim_df, clim_current_df):
     fig = make_climatology_figure(clim_df, clim_current_df, 'Columbia River Basin', 2026, summary)
     assert '92% of median' in fig.layout.title.text
     assert 'ranked 5 of 22' in fig.layout.title.text
+
+
+# ---------------------------------------------------------------------------
+# dataset_label
+# ---------------------------------------------------------------------------
+
+def test_all_figures_carry_dataset_label():
+    from datetime import datetime
+    import pandas as pd
+    import charts
+
+    bands = pd.DataFrame({
+        "elev_band_m": [1000, 1250], "mean_swe_mm": [100.0, 200.0],
+        "area_km2": [50.0, 60.0], "total_swe_volume_km3": [0.005, 0.012],
+    })
+    ts = pd.DataFrame({
+        "date": pd.to_datetime(["2026-01-01", "2026-01-02"]),
+        "basin": ["Columbia River Basin"] * 2,
+        "total_swe_volume_km3": [1.0, 1.1],
+    })
+    d = datetime(2026, 1, 15)
+    label = "SWANN (4 km)"
+
+    figs = [
+        charts.make_huc2_figure(bands, d, dataset_label=label),
+        charts.make_huc4_figure({"A": bands}, d, dataset_label=label),
+        charts.make_huc2_volume_figure(bands, d, dataset_label=label),
+        charts.make_huc4_volume_figure({"A": bands}, d, dataset_label=label),
+        charts.make_basin_timeseries_figure(ts, 2026, dataset_label=label),
+        charts.make_huc4_timeseries_figure(
+            ts.assign(basin="Yakima"), 2026, dataset_label=label),
+    ]
+    for fig in figs:
+        assert label in fig.layout.title.text
+
+
+def test_default_dataset_label_is_snodas():
+    from datetime import datetime
+    import pandas as pd
+    import charts
+
+    bands = pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [0.005],
+    })
+    fig = charts.make_huc2_figure(bands, datetime(2026, 1, 15))
+    assert "SNODAS" in fig.layout.title.text
+
+
+def test_climatology_figure_shows_dataset_and_record_label():
+    import pandas as pd
+    import charts
+
+    clim = pd.DataFrame({
+        "dow": [1, 2],
+        "ref_date": pd.to_datetime(["2022-10-01", "2022-10-02"]),
+        "min": [0.1, 0.1], "p10": [0.2, 0.2], "p25": [0.3, 0.3],
+        "p50": [0.5, 0.5], "p75": [0.7, 0.7], "p90": [0.8, 0.8],
+        "max": [1.0, 1.0], "n": [10, 10],
+    })
+    fig = charts.make_climatology_figure(
+        clim, None, "Columbia River Basin", 2026,
+        dataset_label="SWANN (4 km)", record_label="WY1982–WY2025 envelope")
+    assert "SWANN (4 km)" in fig.layout.title.text
+    assert "WY1982" in fig.layout.title.text
