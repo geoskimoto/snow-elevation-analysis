@@ -7,14 +7,12 @@ import plotly.graph_objects as go
 import config
 import datasets
 import timeseries
-from basin_loader import load_huc2, load_huc4
+from basin_loader import load_all_basins
 from charts import make_huc2_figure, make_huc4_figure, make_huc2_volume_figure, make_huc4_volume_figure
 from dem_processor import get_aligned_dem
 from elevation_bands import compute_bands
 from plotter import plot_hypsometric
 from snodas_fetcher import fetch_swe
-
-_HUC2_KEY = 'Columbia River Basin'
 
 
 def _cache_path(date_key: str, cache_dir: Path, dataset: str = 'snodas') -> Path:
@@ -82,8 +80,8 @@ def run_pipeline(date_str: str, set_progress=None, dataset: str = 'snodas') -> d
         swe_tif = fetch_fn(date, cache_dir=cache_dir)
 
         _progress(2, 5, 'Loading basin boundaries...')
-        huc2 = load_huc2()
-        huc4 = load_huc4()
+        basins = load_all_basins()
+        names = dict(zip(basins['huc'], basins['name']))
 
         _progress(3, 5, 'Building/loading DEM...')
         dem_tif = get_aligned_dem(swe_tif, dem_cache=cache_dir / 'dem' / ds['dem_filename'])
@@ -91,36 +89,42 @@ def run_pipeline(date_str: str, set_progress=None, dataset: str = 'snodas') -> d
         _progress(4, 5, 'Computing elevation bands...')
         cached = load_band_cache(date_key, cache_dir, dataset)
         if cached is None:
-            bands_by_basin: dict = {
-                _HUC2_KEY: compute_bands(swe_tif, dem_tif, huc2.geometry[0],
-                                         min_band_area_km2=100.0)
+            bands_by_huc = {
+                row.huc: compute_bands(swe_tif, dem_tif, row.geometry,
+                                       min_band_area_km2=100.0)
+                for row in basins.itertuples()
             }
-            for _, row in huc4.iterrows():
-                bands_by_basin[row['name']] = compute_bands(
-                    swe_tif, dem_tif, row.geometry, min_band_area_km2=100.0
-                )
-            save_band_cache(bands_by_basin, date_key, cache_dir, dataset)
+            save_band_cache(bands_by_huc, names, date_key, cache_dir, dataset)
         else:
-            bands_by_basin = cached
+            bands_by_huc, names = cached
 
-        timeseries.append_volumes(date, bands_by_basin, cache_dir, dataset=dataset)
+        timeseries.append_volumes(date, bands_by_huc, names, cache_dir,
+                                  dataset=dataset)
 
         _progress(5, 5, 'Rendering figures...')
-        written = plot_hypsometric(bands_by_basin, date, output_dir)
+        huc2_df = bands_by_huc.get('17')
+        huc4_by_name = {names[h]: b for h, b in bands_by_huc.items()
+                        if len(h) == 4}
+        written = plot_hypsometric(
+            {'Columbia River Basin': huc2_df, **huc4_by_name}, date, output_dir)
         png_by_stem = {p.stem: p for p in written}
 
-        huc4_bands = {k: v for k, v in bands_by_basin.items() if k != _HUC2_KEY}
-        huc2_df = bands_by_basin.get(_HUC2_KEY)
-        huc2_fig = make_huc2_figure(huc2_df, date, dataset_label=ds['label']) if huc2_df is not None else go.Figure()
-        huc4_fig = make_huc4_figure(huc4_bands, date, dataset_label=ds['label'])
-        huc2_vol_fig = make_huc2_volume_figure(huc2_df, date, dataset_label=ds['label']) if huc2_df is not None else go.Figure()
-        huc4_vol_fig = make_huc4_volume_figure(huc4_bands, date, dataset_label=ds['label'])
+        huc2_fig = make_huc2_figure(huc2_df, date, dataset_label=ds['label']) \
+            if huc2_df is not None else go.Figure()
+        huc4_fig = make_huc4_figure(huc4_by_name, date, dataset_label=ds['label'])
+        huc2_vol_fig = make_huc2_volume_figure(huc2_df, date, dataset_label=ds['label']) \
+            if huc2_df is not None else go.Figure()
+        huc4_vol_fig = make_huc4_volume_figure(huc4_by_name, date,
+                                               dataset_label=ds['label'])
 
         return {
             'huc2_fig': huc2_fig,
             'huc4_fig': huc4_fig,
             'huc2_vol_fig': huc2_vol_fig,
             'huc4_vol_fig': huc4_vol_fig,
+            'huc6_bands': {h: b.to_dict('records')
+                           for h, b in bands_by_huc.items() if len(h) == 6},
+            'names': names,
             'huc2_png': str(png_by_stem.get(f'snow_hypsometric_huc2_{date_key}', '')),
             'huc4_png': str(png_by_stem.get(f'snow_hypsometric_huc4_{date_key}', '')),
             'error': None,
@@ -132,6 +136,8 @@ def run_pipeline(date_str: str, set_progress=None, dataset: str = 'snodas') -> d
             'huc4_fig': go.Figure(),
             'huc2_vol_fig': go.Figure(),
             'huc4_vol_fig': go.Figure(),
+            'huc6_bands': {},
+            'names': {},
             'huc2_png': '',
             'huc4_png': '',
             'error': str(exc),

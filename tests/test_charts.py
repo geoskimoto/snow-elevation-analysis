@@ -179,15 +179,23 @@ def test_make_huc4_timeseries_figure_returns_figure(timeseries_df):
 
 
 def test_make_huc4_timeseries_figure_trace_count(timeseries_df):
+    # make_huc4_timeseries_figure no longer filters out the HUC2 basin
+    # internally (Task 4) -- callers pre-filter by huc level, so the test
+    # passes in an already-subbasin-only slice, as a real caller would.
     from charts import make_huc4_timeseries_figure
-    fig = make_huc4_timeseries_figure(timeseries_df, 2024)
-    # timeseries_df has 2 subbasins: Upper Columbia, Snake River
+    subbasin_df = timeseries_df[timeseries_df['basin'] != 'Columbia River Basin']
+    fig = make_huc4_timeseries_figure(subbasin_df, 2024)
+    # subbasin_df has 2 subbasins: Upper Columbia, Snake River
     assert len(fig.data) == 2
 
 
 def test_make_huc4_timeseries_figure_excludes_columbia(timeseries_df):
+    # Caller is now responsible for pre-filtering out the HUC2 basin
+    # (Task 4 dropped the internal filter) -- verify the subbasin-only
+    # slice still renders without a Columbia trace.
     from charts import make_huc4_timeseries_figure
-    fig = make_huc4_timeseries_figure(timeseries_df, 2024)
+    subbasin_df = timeseries_df[timeseries_df['basin'] != 'Columbia River Basin']
+    fig = make_huc4_timeseries_figure(subbasin_df, 2024)
     trace_names = [t.name for t in fig.data]
     assert 'Columbia River Basin' not in trace_names
 
@@ -361,6 +369,22 @@ def test_default_dataset_label_is_snodas():
     })
     fig = charts.make_huc2_figure(bands, datetime(2026, 1, 15))
     assert "SNODAS" in fig.layout.title.text
+
+
+def test_group_label_overrides_title():
+    from datetime import datetime
+    import pandas as pd
+    import charts
+
+    bands = pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [0.005],
+    })
+    fig = charts.make_huc4_figure({"Salmon": bands}, datetime(2026, 1, 15),
+                                  group_label="Lower Snake HUC6 Basins")
+    assert "Lower Snake HUC6 Basins" in fig.layout.title.text
+    default = charts.make_huc4_figure({"Salmon": bands}, datetime(2026, 1, 15))
+    assert "HUC4 Subbasins" in default.layout.title.text
 
 
 def test_climatology_figure_shows_dataset_and_record_label():

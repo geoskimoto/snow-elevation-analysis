@@ -74,7 +74,8 @@ def make_huc2_figure(df: pd.DataFrame, date: datetime,
 
 
 def make_huc4_figure(bands_by_subbasin: dict, date: datetime,
-                     dataset_label: str = _DEFAULT_DATASET_LABEL) -> go.Figure:
+                     dataset_label: str = _DEFAULT_DATASET_LABEL,
+                     group_label: str = 'HUC4 Subbasins') -> go.Figure:
     date_label = date.strftime('%b %d, %Y')
     yr = _y_range_ft(list(bands_by_subbasin.values()))
     fig = go.Figure()
@@ -88,7 +89,7 @@ def make_huc4_figure(bands_by_subbasin: dict, date: datetime,
         ))
     fig.add_trace(go.Scatter(x=[None], y=[None], yaxis='y2', showlegend=False))
     fig.update_layout(
-        title=dict(text=f'HUC4 Subbasins — SWE by Elevation · {dataset_label}<br>{date_label}', font={'size': 13}),
+        title=dict(text=f'{group_label} — SWE by Elevation · {dataset_label}<br>{date_label}', font={'size': 13}),
         xaxis_title='Mean SWE (in)',
         yaxis=dict(title='Elevation (ft)', range=yr),
         yaxis2=_m_axis(yr),
@@ -125,7 +126,8 @@ def make_huc2_volume_figure(df: pd.DataFrame, date: datetime,
 
 
 def make_huc4_volume_figure(bands_by_subbasin: dict, date: datetime,
-                            dataset_label: str = _DEFAULT_DATASET_LABEL) -> go.Figure:
+                            dataset_label: str = _DEFAULT_DATASET_LABEL,
+                            group_label: str = 'HUC4 Subbasins') -> go.Figure:
     date_label = date.strftime('%b %d, %Y')
     yr = _y_range_ft(list(bands_by_subbasin.values()))
     fig = go.Figure()
@@ -140,7 +142,7 @@ def make_huc4_volume_figure(bands_by_subbasin: dict, date: datetime,
         ))
     fig.add_trace(go.Bar(x=[None], y=[None], yaxis='y2', showlegend=False))
     fig.update_layout(
-        title=dict(text=f'HUC4 Subbasins — Volume by Elevation · {dataset_label}<br>{date_label}', font={'size': 13}),
+        title=dict(text=f'{group_label} — Volume by Elevation · {dataset_label}<br>{date_label}', font={'size': 13}),
         xaxis_title='SWE Volume (MAF)',
         yaxis=dict(title='Elevation (ft)', range=yr),
         yaxis2=_m_axis(yr),
@@ -275,13 +277,13 @@ def make_basin_timeseries_figure(df: pd.DataFrame, wy: int,
 
 
 def make_huc4_timeseries_figure(df: pd.DataFrame, wy: int,
-                                dataset_label: str = _DEFAULT_DATASET_LABEL) -> go.Figure:
+                                dataset_label: str = _DEFAULT_DATASET_LABEL,
+                                group_label: str = 'HUC4 Subbasins') -> go.Figure:
     if df.empty:
         return go.Figure()
-    subbasin_df = df[df['basin'] != 'Columbia River Basin']
     fig = go.Figure()
-    for i, name in enumerate(sorted(subbasin_df['basin'].unique())):
-        trace_df = subbasin_df[subbasin_df['basin'] == name]
+    for i, name in enumerate(sorted(df['basin'].unique())):
+        trace_df = df[df['basin'] == name]
         fig.add_trace(go.Scatter(
             x=trace_df['date'],
             y=trace_df['total_swe_volume_km3'] * _KM3_TO_MAF,
@@ -290,7 +292,7 @@ def make_huc4_timeseries_figure(df: pd.DataFrame, wy: int,
             name=name,
         ))
     fig.update_layout(
-        title=dict(text=f'HUC4 Subbasins — SWE Volume WY{wy} · {dataset_label}', font={'size': 13}),
+        title=dict(text=f'{group_label} — SWE Volume WY{wy} · {dataset_label}', font={'size': 13}),
         xaxis_title='Date',
         yaxis_title='SWE Volume (MAF)',
         template='plotly_white',

@@ -29,6 +29,18 @@ def sample_bands_by_basin(sample_bands):
 _HUC_NAMES = {'17': 'Columbia River Basin', '1701': 'Upper Columbia'}
 
 
+@pytest.fixture
+def fake_basins():
+    """Minimal load_all_basins() stand-in: a plain DataFrame with the (huc,
+    name, geometry) columns run_pipeline iterates via itertuples(). Geometry
+    values are unused stand-ins since compute_bands is always mocked."""
+    return pd.DataFrame({
+        'huc': ['17', '1701'],
+        'name': ['Columbia River Basin', 'Upper Columbia'],
+        'geometry': [MagicMock(), MagicMock()],
+    })
+
+
 def test_save_and_load_band_cache(tmp_path, sample_bands_by_basin):
     from pipeline import save_band_cache, load_band_cache
     bands_by_huc = {'17': sample_bands_by_basin['Columbia River Basin'],
@@ -50,12 +62,11 @@ def test_load_band_cache_returns_none_if_missing(tmp_path):
     assert result is None
 
 
-def test_run_pipeline_returns_figures_on_success(tmp_path, sample_bands_by_basin):
+def test_run_pipeline_returns_figures_on_success(tmp_path, sample_bands_by_basin, fake_basins):
     from pipeline import run_pipeline
 
     with patch('pipeline.fetch_swe', return_value=Path('swe.tif')), \
-         patch('pipeline.load_huc2') as mock_huc2, \
-         patch('pipeline.load_huc4') as mock_huc4, \
+         patch('pipeline.load_all_basins', return_value=fake_basins), \
          patch('pipeline.get_aligned_dem', return_value=Path('dem.tif')), \
          patch('pipeline.compute_bands', return_value=sample_bands_by_basin['Columbia River Basin']), \
          patch('pipeline.plot_hypsometric', return_value=[
@@ -64,17 +75,6 @@ def test_run_pipeline_returns_figures_on_success(tmp_path, sample_bands_by_basin
          ]), \
          patch('pipeline.config.get_cache_dir', return_value=tmp_path), \
          patch('pipeline.config.get_output_dir', return_value=tmp_path):
-
-        huc2_gdf = MagicMock()
-        huc2_gdf.geometry = [MagicMock()]
-        mock_huc2.return_value = huc2_gdf
-
-        huc4_gdf = MagicMock()
-        row = MagicMock()
-        row.__getitem__ = MagicMock(return_value='Upper Columbia')
-        row.geometry = MagicMock()
-        huc4_gdf.iterrows.return_value = iter([(0, row)])
-        mock_huc4.return_value = huc4_gdf
 
         result = run_pipeline('2024-04-01')
 
@@ -94,14 +94,15 @@ def test_run_pipeline_returns_error_on_exception(tmp_path):
     assert result['error'] == 'network error'
 
 
-def test_run_pipeline_uses_band_cache_on_second_call(tmp_path, sample_bands_by_basin):
+def test_run_pipeline_uses_band_cache_on_second_call(tmp_path, sample_bands_by_basin, fake_basins):
     from pipeline import run_pipeline, save_band_cache
 
-    save_band_cache(sample_bands_by_basin, '20240401', tmp_path)
+    bands_by_huc = {'17': sample_bands_by_basin['Columbia River Basin'],
+                    '1701': sample_bands_by_basin['Upper Columbia']}
+    save_band_cache(bands_by_huc, _HUC_NAMES, '20240401', tmp_path)
 
     with patch('pipeline.fetch_swe', return_value=Path('swe.tif')), \
-         patch('pipeline.load_huc2') as mock_huc2, \
-         patch('pipeline.load_huc4') as mock_huc4, \
+         patch('pipeline.load_all_basins', return_value=fake_basins), \
          patch('pipeline.get_aligned_dem', return_value=Path('dem.tif')), \
          patch('pipeline.compute_bands') as mock_compute, \
          patch('pipeline.plot_hypsometric', return_value=[
@@ -111,17 +112,12 @@ def test_run_pipeline_uses_band_cache_on_second_call(tmp_path, sample_bands_by_b
          patch('pipeline.config.get_cache_dir', return_value=tmp_path), \
          patch('pipeline.config.get_output_dir', return_value=tmp_path):
 
-        mock_huc2.return_value = MagicMock()
-        mock_huc2.return_value.geometry = [MagicMock()]
-        mock_huc4.return_value = MagicMock()
-        mock_huc4.return_value.iterrows.return_value = iter([])
-
         run_pipeline('2024-04-01')
 
     mock_compute.assert_not_called()
 
 
-def test_run_pipeline_progress_called(tmp_path, sample_bands_by_basin):
+def test_run_pipeline_progress_called(tmp_path, sample_bands_by_basin, fake_basins):
     from pipeline import run_pipeline
 
     progress_calls = []
@@ -130,8 +126,7 @@ def test_run_pipeline_progress_called(tmp_path, sample_bands_by_basin):
         progress_calls.append(args)
 
     with patch('pipeline.fetch_swe', return_value=Path('swe.tif')), \
-         patch('pipeline.load_huc2') as mock_huc2, \
-         patch('pipeline.load_huc4') as mock_huc4, \
+         patch('pipeline.load_all_basins', return_value=fake_basins), \
          patch('pipeline.get_aligned_dem', return_value=Path('dem.tif')), \
          patch('pipeline.compute_bands', return_value=sample_bands_by_basin['Columbia River Basin']), \
          patch('pipeline.plot_hypsometric', return_value=[
@@ -140,12 +135,6 @@ def test_run_pipeline_progress_called(tmp_path, sample_bands_by_basin):
          ]), \
          patch('pipeline.config.get_cache_dir', return_value=tmp_path), \
          patch('pipeline.config.get_output_dir', return_value=tmp_path):
-
-        huc2_gdf = MagicMock()
-        huc2_gdf.geometry = [MagicMock()]
-        mock_huc2.return_value = huc2_gdf
-        mock_huc4.return_value = MagicMock()
-        mock_huc4.return_value.iterrows.return_value = iter([])
 
         run_pipeline('2024-04-01', set_progress=fake_progress)
 
@@ -212,6 +201,35 @@ def test_band_cache_roundtrip_huc_schema(tmp_path):
     assert set(bands_by_huc) == {"170602"}
     assert names["170602"] == "Salmon"
     assert "huc" not in bands_by_huc["170602"].columns  # values are pure band frames
+
+
+def test_run_pipeline_computes_35_basins_and_exposes_huc6(tmp_path, monkeypatch):
+    """run_pipeline must band all 35 basins and return huc6 bands + names."""
+    import pandas as pd
+    import pipeline
+    import config
+
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path))
+    computed = []
+
+    def fake_compute(swe_tif, dem_tif, geom, min_band_area_km2=0.0):
+        computed.append(1)
+        return pd.DataFrame({
+            "elev_band_m": [1000], "mean_swe_mm": [100.0],
+            "area_km2": [500.0], "total_swe_volume_km3": [0.05],
+        })
+
+    monkeypatch.setattr(pipeline, "compute_bands", fake_compute)
+    monkeypatch.setattr(pipeline, "fetch_swe", lambda d, cache_dir: tmp_path / "x.tif")
+    monkeypatch.setattr(pipeline, "get_aligned_dem", lambda s, dem_cache: tmp_path / "d.tif")
+    monkeypatch.setattr(pipeline, "plot_hypsometric", lambda b, d, o: [])
+
+    result = pipeline.run_pipeline("2026-01-15")
+    assert result["error"] is None
+    assert len(computed) == 35
+    assert len(result["huc6_bands"]) == 22
+    assert result["names"]["170602"] == "Salmon"
+    assert isinstance(result["huc6_bands"]["170602"], list)  # records, serializable
 
 
 def test_load_band_cache_old_schema_is_cache_miss(tmp_path):
