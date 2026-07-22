@@ -27,15 +27,17 @@ def test_load_huc4_returns_geodataframe():
 
 def test_load_huc4_has_expected_subbasins():
     gdf = basin_loader.load_huc4()
-    # 10 original HUC4s + 4 sub-basins replacing 1701 and 1702
-    assert len(gdf) == 14
+    # Standard WBD region 17: 12 subregions (1701-1712), no custom splits.
+    assert len(gdf) == 12
+    codes = set(gdf['huc4'])
+    assert codes == {f"17{i:02d}" for i in range(1, 13)}
     names = set(gdf['name'])
-    assert 'Kootenai' in names
-    assert 'Pend Oreille-Spokane' in names
-    assert 'Upper Columbia (BC)' in names
-    assert 'Upper Columbia (Washington)' in names
-    assert 'Kootenai-Pend Oreille-Spokane' not in names
-    assert 'Upper Columbia' not in names
+    assert 'Kootenai-Pend Oreille-Spokane' in names
+    assert 'Upper Columbia' in names
+    assert 'Kootenai' not in names
+    assert 'Pend Oreille-Spokane' not in names
+    assert 'Upper Columbia (BC)' not in names
+    assert 'Upper Columbia (Washington)' not in names
 
 
 def test_load_huc4_has_name_column():
