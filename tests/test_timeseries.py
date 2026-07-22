@@ -32,6 +32,18 @@ def _expected_volume(swe_mm: float = 100.0, area_km2: float = 10.0) -> float:
     return swe_mm * area_km2 * 1e-6 + swe_mm * 1.5 * area_km2 * 1e-6
 
 
+# huc-code -> display name used across the legacy (pre-HUC-rekey) test bodies
+# below, updated in place for the new append_volumes(date, bands_by_huc,
+# names, cache_dir, ...) signature (Task 2: huc-keyed schema).
+_NAMES = {
+    '17': 'Columbia River Basin',
+    '1701': 'Upper Columbia',
+    '1702': 'Snake',
+    '1703': 'Yakima',
+    '9999': 'TestBasin',
+}
+
+
 # ---------------------------------------------------------------------------
 # water_year
 # ---------------------------------------------------------------------------
@@ -75,7 +87,7 @@ class TestLoadTimeseriesMissingFile:
 
     def test_empty_df_has_correct_columns(self, tmp_path):
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
-        assert list(df.columns) == ['date', 'basin', 'total_swe_volume_km3']
+        assert list(df.columns) == ['date', 'huc', 'basin', 'total_swe_volume_km3']
 
     def test_date_column_dtype_is_datetime(self, tmp_path):
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
@@ -95,44 +107,45 @@ class TestLoadTimeseriesMissingFile:
 class TestAppendVolumes:
     def test_creates_parquet_on_first_call(self, tmp_path):
         date = datetime(2026, 1, 15)
-        bands_by_basin = {'Columbia River Basin': _make_bands_df()}
-        timeseries.append_volumes(date, bands_by_basin, tmp_path)
+        bands_by_huc = {'17': _make_bands_df()}
+        timeseries.append_volumes(date, bands_by_huc, _NAMES, tmp_path)
         expected = tmp_path / 'timeseries' / 'WY2026_volume.parquet'
         assert expected.exists()
 
     def test_correct_volume_value(self, tmp_path):
         date = datetime(2026, 1, 15)
-        bands_by_basin = {'Columbia River Basin': _make_bands_df()}
-        timeseries.append_volumes(date, bands_by_basin, tmp_path)
+        bands_by_huc = {'17': _make_bands_df()}
+        timeseries.append_volumes(date, bands_by_huc, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
-        row = df[df['basin'] == 'Columbia River Basin'].iloc[0]
+        row = df[df['huc'] == '17'].iloc[0]
+        assert row['basin'] == 'Columbia River Basin'
         assert row['total_swe_volume_km3'] == pytest.approx(_expected_volume())
 
     def test_idempotent_same_date_same_basin(self, tmp_path):
         date = datetime(2026, 1, 15)
-        bands_by_basin = {'Columbia River Basin': _make_bands_df()}
-        timeseries.append_volumes(date, bands_by_basin, tmp_path)
-        timeseries.append_volumes(date, bands_by_basin, tmp_path)
+        bands_by_huc = {'17': _make_bands_df()}
+        timeseries.append_volumes(date, bands_by_huc, _NAMES, tmp_path)
+        timeseries.append_volumes(date, bands_by_huc, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
-        rows = df[(df['basin'] == 'Columbia River Basin') &
+        rows = df[(df['huc'] == '17') &
                   (df['date'] == pd.Timestamp(date))]
         assert len(rows) == 1
 
     def test_multiple_basins_stored(self, tmp_path):
         date = datetime(2026, 1, 15)
-        bands_by_basin = {
-            'Columbia River Basin': _make_bands_df(swe_mm=100.0),
-            'Upper Columbia': _make_bands_df(swe_mm=50.0),
-            'Snake': _make_bands_df(swe_mm=75.0),
+        bands_by_huc = {
+            '17': _make_bands_df(swe_mm=100.0),
+            '1701': _make_bands_df(swe_mm=50.0),
+            '1702': _make_bands_df(swe_mm=75.0),
         }
-        timeseries.append_volumes(date, bands_by_basin, tmp_path)
+        timeseries.append_volumes(date, bands_by_huc, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
         assert set(df['basin']) == {'Columbia River Basin', 'Upper Columbia', 'Snake'}
 
     def test_multiple_dates_accumulate(self, tmp_path):
-        bands_by_basin = {'Columbia River Basin': _make_bands_df()}
+        bands_by_huc = {'17': _make_bands_df()}
         for day in [1, 8, 15]:
-            timeseries.append_volumes(datetime(2026, 1, day), bands_by_basin, tmp_path)
+            timeseries.append_volumes(datetime(2026, 1, day), bands_by_huc, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
         assert len(df) == 3
 
@@ -141,24 +154,24 @@ class TestAppendVolumes:
         date = datetime(2026, 2, 1)
         # Two bands: 100mm * 10km2 * 1e-6 + 150mm * 10km2 * 1e-6
         bands = _make_bands_df(swe_mm=100.0, area_km2=10.0)
-        timeseries.append_volumes(date, {'TestBasin': bands}, tmp_path)
+        timeseries.append_volumes(date, {'9999': bands}, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
-        row = df[df['basin'] == 'TestBasin'].iloc[0]
+        row = df[df['huc'] == '9999'].iloc[0]
         expected = (100.0 * 10.0 + 150.0 * 10.0) * 1e-6
         assert row['total_swe_volume_km3'] == pytest.approx(expected)
 
     def test_date_stored_as_datetime(self, tmp_path):
         date = datetime(2026, 3, 1)
-        timeseries.append_volumes(date, {'Columbia River Basin': _make_bands_df()}, tmp_path)
+        timeseries.append_volumes(date, {'17': _make_bands_df()}, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
         assert pd.api.types.is_datetime64_any_dtype(df['date'])
 
     def test_different_water_years_use_separate_files(self, tmp_path):
-        bands_by_basin = {'Columbia River Basin': _make_bands_df()}
+        bands_by_huc = {'17': _make_bands_df()}
         # WY2025: date in Jan 2025
-        timeseries.append_volumes(datetime(2025, 1, 15), bands_by_basin, tmp_path)
+        timeseries.append_volumes(datetime(2025, 1, 15), bands_by_huc, _NAMES, tmp_path)
         # WY2026: date in Jan 2026
-        timeseries.append_volumes(datetime(2026, 1, 15), bands_by_basin, tmp_path)
+        timeseries.append_volumes(datetime(2026, 1, 15), bands_by_huc, _NAMES, tmp_path)
         wy2025 = tmp_path / 'timeseries' / 'WY2025_volume.parquet'
         wy2026 = tmp_path / 'timeseries' / 'WY2026_volume.parquet'
         assert wy2025.exists()
@@ -171,22 +184,22 @@ class TestAppendVolumes:
     def test_idempotent_does_not_change_volume(self, tmp_path):
         """Calling append_volumes twice with same date must not alter stored volume."""
         date = datetime(2026, 4, 1)
-        bands_by_basin = {'Columbia River Basin': _make_bands_df(swe_mm=200.0)}
-        timeseries.append_volumes(date, bands_by_basin, tmp_path)
-        timeseries.append_volumes(date, bands_by_basin, tmp_path)
+        bands_by_huc = {'17': _make_bands_df(swe_mm=200.0)}
+        timeseries.append_volumes(date, bands_by_huc, _NAMES, tmp_path)
+        timeseries.append_volumes(date, bands_by_huc, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
-        row = df[df['basin'] == 'Columbia River Basin'].iloc[0]
+        row = df[df['huc'] == '17'].iloc[0]
         assert row['total_swe_volume_km3'] == pytest.approx(_expected_volume(swe_mm=200.0))
 
     def test_huc2_and_huc4_stored_together(self, tmp_path):
         """HUC2 and HUC4 basins all go into the same parquet file."""
         date = datetime(2026, 1, 15)
-        bands_by_basin = {
-            'Columbia River Basin': _make_bands_df(),   # HUC2
-            'Upper Columbia': _make_bands_df(),          # HUC4
-            'Snake': _make_bands_df(),                   # HUC4
+        bands_by_huc = {
+            '17': _make_bands_df(),     # HUC2
+            '1701': _make_bands_df(),   # HUC4
+            '1702': _make_bands_df(),   # HUC4
         }
-        timeseries.append_volumes(date, bands_by_basin, tmp_path)
+        timeseries.append_volumes(date, bands_by_huc, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
         # All three in the same file
         assert len(df) == 3
@@ -204,26 +217,26 @@ class TestAppendVolumes:
 class TestLoadTimeseriesFileExists:
     def test_returns_correct_columns(self, tmp_path):
         date = datetime(2026, 1, 15)
-        timeseries.append_volumes(date, {'Columbia River Basin': _make_bands_df()}, tmp_path)
+        timeseries.append_volumes(date, {'17': _make_bands_df()}, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
-        assert list(df.columns) == ['date', 'basin', 'total_swe_volume_km3']
+        assert list(df.columns) == ['date', 'huc', 'basin', 'total_swe_volume_km3']
 
     def test_returns_dataframe(self, tmp_path):
         date = datetime(2026, 1, 15)
-        timeseries.append_volumes(date, {'Columbia River Basin': _make_bands_df()}, tmp_path)
+        timeseries.append_volumes(date, {'17': _make_bands_df()}, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
         assert isinstance(df, pd.DataFrame)
 
     def test_basin_column_is_string(self, tmp_path):
         date = datetime(2026, 1, 15)
-        timeseries.append_volumes(date, {'Columbia River Basin': _make_bands_df()}, tmp_path)
+        timeseries.append_volumes(date, {'17': _make_bands_df()}, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
         # pandas >= 2.0 may return StringDtype rather than object; check semantic type
         assert pd.api.types.is_string_dtype(df['basin'])
 
     def test_volume_column_is_float(self, tmp_path):
         date = datetime(2026, 1, 15)
-        timeseries.append_volumes(date, {'Columbia River Basin': _make_bands_df()}, tmp_path)
+        timeseries.append_volumes(date, {'17': _make_bands_df()}, _NAMES, tmp_path)
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
         assert pd.api.types.is_float_dtype(df['total_swe_volume_km3'])
 
@@ -239,7 +252,7 @@ class TestLoadTimeseriesOrdering:
     def test_backfilled_date_loads_chronologically(self, tmp_path):
         # Analyze March first, then backfill January (the reported scenario).
         for day in (datetime(2026, 3, 1), datetime(2026, 1, 15)):
-            timeseries.append_volumes(day, {'Columbia River Basin': _make_bands_df()}, tmp_path)
+            timeseries.append_volumes(day, {'17': _make_bands_df()}, _NAMES, tmp_path)
 
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
 
@@ -250,19 +263,20 @@ class TestLoadTimeseriesOrdering:
         for day in (datetime(2026, 3, 1), datetime(2026, 1, 15), datetime(2026, 2, 1)):
             timeseries.append_volumes(
                 day,
-                {'Columbia River Basin': bands, 'Yakima': bands},
+                {'17': bands, '1703': bands},
+                _NAMES,
                 tmp_path,
             )
 
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
 
-        for basin in ('Columbia River Basin', 'Yakima'):
-            dates = df[df['basin'] == basin]['date']
-            assert dates.is_monotonic_increasing, f'{basin} rows are not chronological'
+        for huc in ('17', '1703'):
+            dates = df[df['huc'] == huc]['date']
+            assert dates.is_monotonic_increasing, f'{huc} rows are not chronological'
 
     def test_index_is_contiguous_after_sort(self, tmp_path):
         for day in (datetime(2026, 3, 1), datetime(2026, 1, 15)):
-            timeseries.append_volumes(day, {'Columbia River Basin': _make_bands_df()}, tmp_path)
+            timeseries.append_volumes(day, {'17': _make_bands_df()}, _NAMES, tmp_path)
 
         df = timeseries.load_timeseries(wy=2026, cache_dir=tmp_path)
 
@@ -275,11 +289,11 @@ class TestLoadTimeseriesOrdering:
 
 def test_append_and_load_swann_dataset_routes_to_subdir(tmp_path):
     date = datetime(2026, 1, 15)
-    bands = {"Columbia River Basin": pd.DataFrame({
+    bands = {"17": pd.DataFrame({
         "elev_band_m": [1000], "mean_swe_mm": [100.0],
         "area_km2": [50.0], "total_swe_volume_km3": [0.005],
     })}
-    timeseries.append_volumes(date, bands, tmp_path, dataset="swann")
+    timeseries.append_volumes(date, bands, _NAMES, tmp_path, dataset="swann")
 
     assert (tmp_path / "timeseries" / "swann" / "WY2026_volume.parquet").exists()
     # default (snodas) tree untouched
@@ -288,3 +302,52 @@ def test_append_and_load_swann_dataset_routes_to_subdir(tmp_path):
     df = timeseries.load_timeseries(2026, tmp_path, dataset="swann")
     assert len(df) == 1
     assert timeseries.load_timeseries(2026, tmp_path).empty          # snodas view is empty
+
+
+# ---------------------------------------------------------------------------
+# HUC-code-keyed schema (Task 2)
+# ---------------------------------------------------------------------------
+
+def _band_df():
+    return pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [0.005],
+    })
+
+
+def test_append_volumes_huc_schema_and_idempotency(tmp_path):
+    from timeseries import append_volumes, load_timeseries
+
+    bands = {"17": _band_df(), "170602": _band_df()}
+    names = {"17": "Columbia River Basin", "170602": "Salmon"}
+    append_volumes(datetime(2026, 1, 15), bands, names, tmp_path)
+    append_volumes(datetime(2026, 1, 15), bands, names, tmp_path)  # no dupes
+
+    df = load_timeseries(2026, tmp_path)
+    assert list(df.columns) == ["date", "huc", "basin", "total_swe_volume_km3"]
+    assert len(df) == 2
+    assert set(df["huc"]) == {"17", "170602"}
+    assert df.loc[df["huc"] == "170602", "basin"].iloc[0] == "Salmon"
+
+
+def test_append_volumes_name_collision_safe(tmp_path):
+    """Two different hucs sharing a display name must both be stored."""
+    from timeseries import append_volumes, load_timeseries
+
+    bands = {"1703": _band_df(), "170300": _band_df()}
+    names = {"1703": "Yakima", "170300": "Yakima"}
+    append_volumes(datetime(2026, 1, 15), bands, names, tmp_path)
+    df = load_timeseries(2026, tmp_path)
+    assert len(df) == 2
+    assert set(df["huc"]) == {"1703", "170300"}
+
+
+def test_append_volumes_ts_dir_override(tmp_path):
+    from timeseries import append_volumes, load_timeseries
+
+    stage = tmp_path / "rebuild"
+    append_volumes(datetime(2026, 1, 15), {"17": _band_df()},
+                   {"17": "Columbia River Basin"}, tmp_path, ts_dir=stage)
+    assert (stage / "WY2026_volume.parquet").exists()
+    assert not (tmp_path / "timeseries" / "WY2026_volume.parquet").exists()
+    assert len(load_timeseries(2026, tmp_path, ts_dir=stage)) == 1

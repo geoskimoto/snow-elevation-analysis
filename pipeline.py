@@ -24,28 +24,36 @@ def _cache_path(date_key: str, cache_dir: Path, dataset: str = 'snodas') -> Path
     return base / f'{date_key}_250m.parquet'
 
 
-def save_band_cache(bands_by_basin: dict, date_key: str, cache_dir: Path,
-                    dataset: str = 'snodas') -> None:
+def save_band_cache(bands_by_huc: dict, names: dict, date_key: str,
+                    cache_dir: Path, dataset: str = 'snodas') -> None:
     path = _cache_path(date_key, cache_dir, dataset)
     path.parent.mkdir(parents=True, exist_ok=True)
     frames = []
-    for name, df in bands_by_basin.items():
+    for huc, df in bands_by_huc.items():
         row = df.copy()
-        row.insert(0, 'basin', name)
+        row.insert(0, 'basin', names[huc])
+        row.insert(0, 'huc', huc)
         frames.append(row)
     pd.concat(frames).to_parquet(path, index=False)
 
 
 def load_band_cache(date_key: str, cache_dir: Path,
-                    dataset: str = 'snodas') -> dict | None:
+                    dataset: str = 'snodas') -> tuple[dict, dict] | None:
+    """Return (bands_by_huc, names) or None on miss. Old-schema files
+    (pre-HUC6, no 'huc' column) read as a miss so stale basin sets are
+    recomputed rather than reused."""
     path = _cache_path(date_key, cache_dir, dataset)
     if not path.exists():
         return None
     df = pd.read_parquet(path)
-    return {
-        name: group.drop(columns='basin').reset_index(drop=True)
-        for name, group in df.groupby('basin')
+    if 'huc' not in df.columns:
+        return None
+    bands_by_huc = {
+        huc: group.drop(columns=['huc', 'basin']).reset_index(drop=True)
+        for huc, group in df.groupby('huc')
     }
+    names = dict(df.groupby('huc')['basin'].first())
+    return bands_by_huc, names
 
 
 def run_pipeline(date_str: str, set_progress=None, dataset: str = 'snodas') -> dict:

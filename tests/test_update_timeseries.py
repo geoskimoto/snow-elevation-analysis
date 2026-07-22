@@ -34,11 +34,11 @@ def test_process_dataset_skips_when_band_cache_current(tmp_path, monkeypatch, qu
     from pipeline import save_band_cache
 
     target = datetime(2026, 7, 18)
-    bands = {"Columbia River Basin": pd.DataFrame({
+    bands = {"17": pd.DataFrame({
         "elev_band_m": [1000], "mean_swe_mm": [100.0],
         "area_km2": [50.0], "total_swe_volume_km3": [0.005],
     })}
-    save_band_cache(bands, "20260718", tmp_path, dataset="swann")
+    save_band_cache(bands, {"17": "Columbia River Basin"}, "20260718", tmp_path, dataset="swann")
 
     monkeypatch.setitem(
         datasets.DATASETS["swann"], "fetch_latest_swe",

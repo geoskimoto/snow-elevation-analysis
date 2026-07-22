@@ -3,15 +3,17 @@
 Functions
 ---------
 water_year(date)          -- return water-year integer for a datetime
-append_volumes(date, bands_by_basin, cache_dir, dataset='snodas')
-                          -- sum total_swe_volume_km3 per basin and append to
-                             the WY parquet; idempotent on (date, basin).
-load_timeseries(wy, cache_dir, dataset='snodas')
+append_volumes(date, bands_by_huc, names, cache_dir, dataset='snodas', ts_dir=None)
+                          -- sum total_swe_volume_km3 per huc and append to
+                             the WY parquet; idempotent on (date, huc).
+load_timeseries(wy, cache_dir, dataset='snodas', ts_dir=None)
                           -- read the WY parquet; return empty DataFrame if
                              the file does not exist.
 
 Dataset routing: 'snodas' uses {cache_dir}/timeseries/WY*.parquet;
-other datasets use {cache_dir}/timeseries/{dataset}/WY*.parquet.
+other datasets use {cache_dir}/timeseries/{dataset}/WY*.parquet. Passing
+ts_dir overrides the parquet directory entirely (used by the staged
+rebuild), bypassing the cache_dir/dataset routing above.
 """
 
 from datetime import datetime
@@ -24,24 +26,29 @@ import pandas as pd
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-_COLUMNS = ['date', 'basin', 'total_swe_volume_km3']
-
-
-def _parquet_path(wy: int, cache_dir: Path, dataset: str = 'snodas') -> Path:
-    # Routing rule shared with climatology/pipeline: the default dataset keeps
-    # its historical location; any other dataset gets a subdir named after it.
-    base = cache_dir / 'timeseries'
-    if dataset != 'snodas':
-        base = base / dataset
-    return base / f'WY{wy}_volume.parquet'
+_COLUMNS = ['date', 'huc', 'basin', 'total_swe_volume_km3']
 
 
 def _empty_df() -> pd.DataFrame:
     return pd.DataFrame({
         'date': pd.Series([], dtype='datetime64[ns]'),
+        'huc': pd.Series([], dtype=str),
         'basin': pd.Series([], dtype=str),
         'total_swe_volume_km3': pd.Series([], dtype=float),
     })
+
+
+def _parquet_path(wy: int, cache_dir: Path, dataset: str = 'snodas',
+                  ts_dir: Path | None = None) -> Path:
+    # Routing rule shared with climatology/pipeline: the default dataset keeps
+    # its historical location; any other dataset gets a subdir named after it.
+    # ts_dir (when given) overrides this entirely -- used by the staged rebuild.
+    if ts_dir is not None:
+        return Path(ts_dir) / f'WY{wy}_volume.parquet'
+    base = cache_dir / 'timeseries'
+    if dataset != 'snodas':
+        base = base / dataset
+    return base / f'WY{wy}_volume.parquet'
 
 
 # ---------------------------------------------------------------------------
@@ -60,101 +67,53 @@ def water_year(date: datetime) -> int:
     return date.year
 
 
-def append_volumes(date: datetime, bands_by_basin: dict[str, pd.DataFrame], cache_dir: Path, dataset: str = 'snodas') -> None:
-    """Sum ``total_swe_volume_km3`` per basin and append one row per basin.
+def append_volumes(date: datetime, bands_by_huc: dict[str, pd.DataFrame],
+                   names: dict[str, str], cache_dir: Path,
+                   dataset: str = 'snodas', ts_dir: Path | None = None) -> None:
+    """Sum total_swe_volume_km3 per basin and append one row per huc code.
 
-    Parameters
-    ----------
-    date:
-        The date the SWE data represents.
-    bands_by_basin:
-        Mapping of basin name → DataFrame with columns
-        ``[elev_band_m, mean_swe_mm, area_km2, total_swe_volume_km3]``.
-        Both the HUC2 key (``'Columbia River Basin'``) and HUC4 subbasin
-        keys are stored without filtering.
-    cache_dir:
-        Root cache directory.  The parquet is written to
-        ``{cache_dir}/timeseries/WY{wy}_volume.parquet`` for 'snodas',
-        or ``{cache_dir}/timeseries/{dataset}/WY{wy}_volume.parquet`` for
-        other datasets.
-    dataset:
-        Dataset key ('snodas' or 'swann'). Default: 'snodas'.
-
-    Idempotency
-    -----------
-    If a row for *(date, basin)* already exists the row is **not** added
-    again.  Existing data is never modified.
+    bands_by_huc maps WBD huc code -> band DataFrame; names maps huc code ->
+    display name (codes are the unique key: display names collide across
+    HUC levels). Idempotent on (date, huc). ts_dir overrides the output
+    directory (used by the staged rebuild); default routing is unchanged.
     """
     wy = water_year(date)
-    path = _parquet_path(wy, cache_dir, dataset)
-
-    # Ensure parent directory exists
+    path = _parquet_path(wy, cache_dir, dataset, ts_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Load existing data (or start fresh)
-    if path.exists():
-        existing = pd.read_parquet(path)
-    else:
-        existing = _empty_df()
-
+    existing = pd.read_parquet(path) if path.exists() else _empty_df()
     ts = pd.Timestamp(date)
 
     new_rows = []
-    for basin_name, df in bands_by_basin.items():
-        # Idempotency check: skip if (date, basin) already recorded
-        already_exists = (
+    for huc, df in bands_by_huc.items():
+        already = (
             len(existing) > 0
-            and ((existing['date'] == ts) & (existing['basin'] == basin_name)).any()
+            and ((existing['date'] == ts) & (existing['huc'] == huc)).any()
         )
-        if already_exists:
+        if already:
             continue
-
-        total_volume = float(df['total_swe_volume_km3'].sum())
         new_rows.append({
             'date': ts,
-            'basin': basin_name,
-            'total_swe_volume_km3': total_volume,
+            'huc': huc,
+            'basin': names[huc],
+            'total_swe_volume_km3': float(df['total_swe_volume_km3'].sum()),
         })
 
     if not new_rows:
-        return  # Nothing to write
-
-    # NOTE: full read-modify-write per call; acceptable for daily frequency but not bulk ingestion
-    new_df = pd.DataFrame(new_rows)
-    combined = pd.concat([existing, new_df], ignore_index=True)
+        return
+    combined = pd.concat([existing, pd.DataFrame(new_rows)], ignore_index=True)
     combined['date'] = pd.to_datetime(combined['date'])
-    combined = combined[_COLUMNS]
-    combined.to_parquet(path, index=False)
+    combined[_COLUMNS].to_parquet(path, index=False)
 
 
-def load_timeseries(wy: int, cache_dir: Path, dataset: str = 'snodas') -> pd.DataFrame:
-    """Read the WY parquet and return a DataFrame sorted by (basin, date).
-
-    Parameters
-    ----------
-    wy:
-        Water year to load.
-    cache_dir:
-        Root cache directory.
-    dataset:
-        Dataset key ('snodas' or 'swann'). Default: 'snodas'.
-
-    Returns
-    -------
-    pd.DataFrame
-        Columns: ``date`` (datetime64), ``basin`` (str),
-        ``total_swe_volume_km3`` (float), sorted by ``basin`` then ``date``
-        so callers can plot rows in array order.
-        Returns an empty DataFrame with those columns if the file does not
-        exist.
-    """
-    path = _parquet_path(wy, cache_dir, dataset)
+def load_timeseries(wy: int, cache_dir: Path, dataset: str = 'snodas',
+                    ts_dir: Path | None = None) -> pd.DataFrame:
+    """Read the WY parquet; columns [date, huc, basin, total_swe_volume_km3]
+    sorted by (huc, date). Empty DataFrame with those columns if absent."""
+    path = _parquet_path(wy, cache_dir, dataset, ts_dir)
     if not path.exists():
         return _empty_df()
-
     df = pd.read_parquet(path)
     df['date'] = pd.to_datetime(df['date'])
-    # Rows land in the parquet in the order analyses were run, so a backfilled
-    # date can trail a later one. Plotly connects points in array order.
-    df = df.sort_values(['basin', 'date']).reset_index(drop=True)
+    df = df.sort_values(['huc', 'date']).reset_index(drop=True)
     return df[_COLUMNS]

@@ -24,14 +24,23 @@ def sample_bands_by_basin(sample_bands):
     }
 
 
+# huc-code -> display name, paired with sample_bands_by_basin's keys for the
+# huc-keyed save_band_cache/load_band_cache signature (Task 2).
+_HUC_NAMES = {'17': 'Columbia River Basin', '1701': 'Upper Columbia'}
+
+
 def test_save_and_load_band_cache(tmp_path, sample_bands_by_basin):
     from pipeline import save_band_cache, load_band_cache
-    save_band_cache(sample_bands_by_basin, '20240401', tmp_path)
+    bands_by_huc = {'17': sample_bands_by_basin['Columbia River Basin'],
+                    '1701': sample_bands_by_basin['Upper Columbia']}
+    save_band_cache(bands_by_huc, _HUC_NAMES, '20240401', tmp_path)
     loaded = load_band_cache('20240401', tmp_path)
-    assert set(loaded.keys()) == set(sample_bands_by_basin.keys())
+    bands_out, names_out = loaded
+    assert set(bands_out.keys()) == set(bands_by_huc.keys())
+    assert names_out == _HUC_NAMES
     pd.testing.assert_frame_equal(
-        loaded['Columbia River Basin'].reset_index(drop=True),
-        sample_bands_by_basin['Columbia River Basin'].reset_index(drop=True),
+        bands_out['17'].reset_index(drop=True),
+        bands_by_huc['17'].reset_index(drop=True),
     )
 
 
@@ -150,16 +159,18 @@ def test_band_cache_swann_routes_to_subdir(tmp_path):
     import pandas as pd
     from pipeline import save_band_cache, load_band_cache
 
-    bands = {"Columbia River Basin": pd.DataFrame({
+    bands = {"17": pd.DataFrame({
         "elev_band_m": [1000], "mean_swe_mm": [100.0],
         "area_km2": [50.0], "total_swe_volume_km3": [0.005],
     })}
-    save_band_cache(bands, "20260115", tmp_path, dataset="swann")
+    save_band_cache(bands, {"17": "Columbia River Basin"}, "20260115", tmp_path, dataset="swann")
     assert (tmp_path / "bands" / "swann" / "20260115_250m.parquet").exists()
     assert not (tmp_path / "bands" / "20260115_250m.parquet").exists()
 
     loaded = load_band_cache("20260115", tmp_path, dataset="swann")
-    assert "Columbia River Basin" in loaded
+    bands_out, names_out = loaded
+    assert "17" in bands_out
+    assert names_out["17"] == "Columbia River Basin"
     assert load_band_cache("20260115", tmp_path) is None  # snodas view empty
 
 
@@ -184,3 +195,36 @@ def test_run_pipeline_routes_fetcher_by_dataset(tmp_path, monkeypatch):
     result = pipeline.run_pipeline("2026-01-15", dataset="swann")
     assert called == {"swann": True}
     assert result["error"] is not None
+
+
+def test_band_cache_roundtrip_huc_schema(tmp_path):
+    import pandas as pd
+    from pipeline import save_band_cache, load_band_cache
+
+    band = pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [0.005],
+    })
+    save_band_cache({"170602": band}, {"170602": "Salmon"}, "20260115", tmp_path)
+    out = load_band_cache("20260115", tmp_path)
+    assert out is not None
+    bands_by_huc, names = out
+    assert set(bands_by_huc) == {"170602"}
+    assert names["170602"] == "Salmon"
+    assert "huc" not in bands_by_huc["170602"].columns  # values are pure band frames
+
+
+def test_load_band_cache_old_schema_is_cache_miss(tmp_path):
+    """Pre-HUC6 caches (basin-keyed, no huc column) must read as None so
+    the recompute regenerates them instead of using stale basin sets."""
+    import pandas as pd
+    from pipeline import load_band_cache
+
+    old = pd.DataFrame({
+        "basin": ["Kootenai"], "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [0.005],
+    })
+    path = tmp_path / "bands" / "20260115_250m.parquet"
+    path.parent.mkdir(parents=True)
+    old.to_parquet(path, index=False)
+    assert load_band_cache("20260115", tmp_path) is None

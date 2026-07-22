@@ -129,7 +129,8 @@ def test_swann_backfill_skips_download_when_year_fully_done(tmp_path):
     d = start
     while d <= end:
         append_volumes(datetime(d.year, d.month, d.day),
-                       {'Columbia River Basin': vol_df}, tmp_path, dataset='swann')
+                       {'17': vol_df}, {'17': 'Columbia River Basin'},
+                       tmp_path, dataset='swann')
         d += timedelta(days=1)
 
     huc4 = pd.DataFrame({'name': [], 'geometry': []})
