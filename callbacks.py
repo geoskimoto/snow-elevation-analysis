@@ -1,7 +1,7 @@
 import base64
 import io
 import zipfile
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -29,7 +29,7 @@ def _annotated_empty_figure(message: str) -> go.Figure:
     return fig
 
 
-def build_historical_view(df, wy: int, basin: str | None,
+def build_historical_view(df, wy: int, huc: str | None,
                           dataset: str = 'snodas') -> tuple[go.Figure, str]:
     """Return ``(figure, caption)`` for the Historical tab.
 
@@ -37,8 +37,9 @@ def build_historical_view(df, wy: int, basin: str | None,
     it is unit-testable and shared by the Dash callback. Degrades to an
     annotated empty figure when there is no data or too little history.
     """
-    basin = basin or 'Columbia River Basin'
+    huc = huc or '17'
     ds = datasets.get(dataset)
+    label = climatology.display_name(df, huc) or huc
     if df.empty:
         if dataset == 'snodas':
             msg = 'No data yet — run populate_timeseries.py to build the record.'
@@ -47,24 +48,31 @@ def build_historical_view(df, wy: int, basin: str | None,
                    f'populate_timeseries.py --dataset {dataset} to backfill.')
         return _annotated_empty_figure(msg), ''
 
-    n_years = climatology.n_historical_years(df, basin, wy)
+    n_years = climatology.n_historical_years(df, huc, wy)
     if n_years < climatology.MIN_YEARS_FOR_ENVELOPE:
         return _annotated_empty_figure(
-            f'Not enough {ds["label"]} history for {basin} yet — {n_years} prior '
+            f'Not enough {ds["label"]} history for {label} yet — {n_years} prior '
             f'water year(s); need at least {climatology.MIN_YEARS_FOR_ENVELOPE}. '
             f'Run the full-record backfill to populate.'), ''
 
-    clim = climatology.compute_climatology(df, basin, wy)
-    current = climatology.current_series(df, basin, wy)
-    summary = climatology.summarize_current(df, basin, wy)
-    hist_wys = sorted(df[(df['basin'] == basin) & (df['wy'] != wy)]['wy'].unique())
+    clim = climatology.compute_climatology(df, huc, wy)
+    current = climatology.current_series(df, huc, wy)
+    summary = climatology.summarize_current(df, huc, wy)
+    hist_wys = sorted(df[(df['huc'] == huc) & (df['wy'] != wy)]['wy'].unique())
     record_label = f'WY{hist_wys[0]}–WY{hist_wys[-1]} envelope ({n_years} years)'
+    basin_label = f'{label} ({huc})' if len(huc) > 2 else label
     fig = charts.make_climatology_figure(
-        clim, current, basin, wy, summary,
+        clim, current, basin_label, wy, summary,
         dataset_label=ds['label'], record_label=record_label)
     caption = (f'{ds["label"]} envelope from {n_years} water years '
-               f'(WY{hist_wys[0]}–WY{hist_wys[-1]}); bold line is WY{wy}.')
+               f'(WY{hist_wys[0]}–WY{hist_wys[-1]}) for {basin_label}; '
+               f'bold line is WY{wy}.')
     return fig, caption
+
+
+def huc6_children(df, huc4: str):
+    """Rows for the HUC6 children of a HUC4 (huc startswith + length 6)."""
+    return df[(df['huc'].str.startswith(huc4)) & (df['huc'].str.len() == 6)]
 
 
 def _figs_to_zip(named_figs: list[tuple[str, go.Figure]]) -> dict:
@@ -149,6 +157,8 @@ def register(app) -> None:
                 'huc4_fig': result['huc4_fig'].to_dict(),
                 'huc2_vol_fig': result['huc2_vol_fig'].to_dict(),
                 'huc4_vol_fig': result['huc4_vol_fig'].to_dict(),
+                'huc6_bands': result['huc6_bands'],
+                'names': result['names'],
                 'date_str': date_str,
                 'dataset': dataset,
             },
@@ -174,9 +184,9 @@ def register(app) -> None:
             (f'swe_volume_basin_{date_str}.png',         go.Figure(store_data['huc2_vol_fig'])),
             (f'swe_volume_huc4_{date_str}.png',          go.Figure(store_data['huc4_vol_fig'])),
             (f'swe_trend_basin_WY{wy}.png',              charts.make_basin_timeseries_figure(
-                df, wy, dataset_label=ds['label'])),
+                df[df['huc'] == '17'], wy, dataset_label=ds['label'])),
             (f'swe_trend_huc4_WY{wy}.png',               charts.make_huc4_timeseries_figure(
-                df, wy, dataset_label=ds['label'])),
+                df[df['huc'].str.len() == 4], wy, dataset_label=ds['label'])),
         ]
         result = _figs_to_zip(named_figs)
         result['filename'] = f'snow_analysis_{dataset}.zip'
@@ -202,9 +212,9 @@ def register(app) -> None:
             ('Columbia Basin — SWE Volume by Elevation', go.Figure(store_data['huc2_vol_fig'])),
             ('HUC4 Subbasins — SWE Volume by Elevation', go.Figure(store_data['huc4_vol_fig'])),
             ('Columbia Basin — SWE Volume Trend', charts.make_basin_timeseries_figure(
-                df, wy, dataset_label=ds['label'])),
+                df[df['huc'] == '17'], wy, dataset_label=ds['label'])),
             ('HUC4 Subbasins — SWE Volume Trend', charts.make_huc4_timeseries_figure(
-                df, wy, dataset_label=ds['label'])),
+                df[df['huc'].str.len() == 4], wy, dataset_label=ds['label'])),
         ]
         plot_divs = ''.join(
             f'<div class="plot">{pio.to_html(fig, full_html=False, include_plotlyjs=False)}</div>'
@@ -274,8 +284,10 @@ def register(app) -> None:
             return _empty_basin, _empty_huc4
 
         return (
-            charts.make_basin_timeseries_figure(df, wy, dataset_label=ds['label']),
-            charts.make_huc4_timeseries_figure(df, wy, dataset_label=ds['label']),
+            charts.make_basin_timeseries_figure(
+                df[df['huc'] == '17'], wy, dataset_label=ds['label']),
+            charts.make_huc4_timeseries_figure(
+                df[df['huc'].str.len() == 4], wy, dataset_label=ds['label']),
         )
 
     @app.callback(
@@ -289,10 +301,14 @@ def register(app) -> None:
         df = climatology.load_all_water_years(config.get_cache_dir(), dataset=dataset)
         if df.empty:
             return no_update
-        basins = list(df['basin'].unique())
-        huc2 = 'Columbia River Basin'
-        ordered = ([huc2] if huc2 in basins else []) + sorted(b for b in basins if b != huc2)
-        return [{'label': b, 'value': b} for b in ordered]
+        hucs = (df[['huc', 'basin']].drop_duplicates()
+                .sort_values('huc').itertuples())
+        options = []
+        for r in hucs:
+            label = ('Columbia River Basin' if r.huc == '17'
+                     else f'{r.huc} — {r.basin}')
+            options.append({'label': label, 'value': r.huc})
+        return options
 
     @app.callback(
         Output('climatology-graph', 'figure'),
@@ -301,7 +317,7 @@ def register(app) -> None:
         Input('historical-basin', 'value'),
         Input('dataset-select', 'value'),
     )
-    def update_historical_tab(tab_value, basin, dataset):
+    def update_historical_tab(tab_value, huc, dataset):
         if tab_value != 'historical':
             return _annotated_empty_figure(''), ''
         # Read-only: climatology serves committed volume parquets. It never
@@ -309,4 +325,54 @@ def register(app) -> None:
         # scheduled server and on Posit Connect (which cannot run jobs).
         df = climatology.load_all_water_years(config.get_cache_dir(), dataset=dataset)
         wy = timeseries.water_year(date.today())
-        return build_historical_view(df, wy, basin, dataset=dataset)
+        return build_historical_view(df, wy, huc, dataset=dataset)
+
+    @app.callback(
+        Output('huc6-graph', 'figure'),
+        Output('huc6-volume-graph', 'figure'),
+        Input('result-store', 'data'),
+        Input('huc4-drill', 'value'),
+    )
+    def update_snowpack_drilldown(store_data, huc4):
+        if not store_data or 'huc6_bands' not in store_data or not huc4:
+            return _annotated_empty_figure('Run an analysis to populate the drill-down.'), \
+                   _annotated_empty_figure('')
+        import pandas as pd
+        names = store_data.get('names', {})
+        children = {
+            names.get(h, h): pd.DataFrame(rows)
+            for h, rows in store_data['huc6_bands'].items()
+            if h.startswith(huc4)
+        }
+        if not children:
+            return _annotated_empty_figure('No HUC6 children for this subregion.'), \
+                   _annotated_empty_figure('')
+        date_ = datetime.strptime(store_data['date_str'], '%Y-%m-%d')
+        parent = names.get(huc4, huc4)
+        ds = datasets.get(store_data.get('dataset', 'snodas'))
+        label = f'{parent} HUC6 Basins'
+        return (charts.make_huc4_figure(children, date_, dataset_label=ds['label'],
+                                        group_label=label),
+                charts.make_huc4_volume_figure(children, date_, dataset_label=ds['label'],
+                                               group_label=label))
+
+    @app.callback(
+        Output('huc6-timeseries-graph', 'figure'),
+        Input('main-tabs', 'value'),
+        Input('huc4-drill', 'value'),
+        Input('dataset-select', 'value'),
+    )
+    def update_trends_drilldown(tab_value, huc4, dataset):
+        if tab_value != 'trends' or not huc4:
+            return _annotated_empty_figure('')
+        wy = timeseries.water_year(date.today())
+        df = timeseries.load_timeseries(wy, config.get_cache_dir(), dataset=dataset)
+        children = huc6_children(df, huc4)
+        if children.empty:
+            return _annotated_empty_figure('No data yet for this subregion.')
+        ds = datasets.get(dataset)
+        parent = df.loc[df['huc'] == huc4, 'basin']
+        parent_name = parent.iloc[0] if len(parent) else huc4
+        return charts.make_huc4_timeseries_figure(
+            children, wy, dataset_label=ds['label'],
+            group_label=f'{parent_name} HUC6 Basins')

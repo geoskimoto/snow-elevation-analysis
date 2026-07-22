@@ -140,7 +140,8 @@ def test_trends_tab_not_selected_returns_empty_figures():
 # Historical tab — build_historical_view
 # ---------------------------------------------------------------------------
 
-def _multi_year_df(n_years: int, basin: str = 'Columbia River Basin') -> pd.DataFrame:
+def _multi_year_df(n_years: int, basin: str = 'Columbia River Basin',
+                   huc: str = '17') -> pd.DataFrame:
     """Daily volume rows for n_years historical WYs plus a partial current WY."""
     import numpy as np
     rows = []
@@ -148,19 +149,19 @@ def _multi_year_df(n_years: int, basin: str = 'Columbia River Basin') -> pd.Data
     for wy in hist_wys:
         for d in pd.date_range(f'{wy - 1}-10-01', f'{wy}-09-30', freq='D'):
             base = 5 + 4 * np.sin((d.dayofyear / 365) * 2 * np.pi)
-            rows.append({'date': d, 'basin': basin,
+            rows.append({'date': d, 'huc': huc, 'basin': basin,
                          'total_swe_volume_km3': max(0.0, base), 'wy': wy})
     for d in pd.date_range('2025-10-01', '2026-01-15', freq='D'):
         base = 5 + 4 * np.sin((d.dayofyear / 365) * 2 * np.pi)
-        rows.append({'date': d, 'basin': basin,
+        rows.append({'date': d, 'huc': huc, 'basin': basin,
                      'total_swe_volume_km3': max(0.0, base - 1.0), 'wy': 2026})
     return pd.DataFrame(rows)
 
 
 def test_historical_view_empty_df_returns_annotation():
     from callbacks import build_historical_view
-    empty = pd.DataFrame(columns=['date', 'basin', 'total_swe_volume_km3', 'wy'])
-    fig, caption = build_historical_view(empty, wy=2026, basin='Columbia River Basin')
+    empty = pd.DataFrame(columns=['date', 'huc', 'basin', 'total_swe_volume_km3', 'wy'])
+    fig, caption = build_historical_view(empty, wy=2026, huc='17')
     assert len(fig.data) == 0
     assert caption == ''
     assert 'No data yet' in fig.layout.annotations[0].text
@@ -169,7 +170,7 @@ def test_historical_view_empty_df_returns_annotation():
 def test_historical_view_insufficient_years_returns_annotation():
     from callbacks import build_historical_view
     df = _multi_year_df(n_years=2)  # below MIN_YEARS_FOR_ENVELOPE (3)
-    fig, caption = build_historical_view(df, wy=2026, basin='Columbia River Basin')
+    fig, caption = build_historical_view(df, wy=2026, huc='17')
     assert len(fig.data) == 0
     assert caption == ''
     assert 'Not enough SNODAS (~1 km) history' in fig.layout.annotations[0].text
@@ -178,7 +179,7 @@ def test_historical_view_insufficient_years_returns_annotation():
 def test_historical_view_builds_envelope_with_enough_years():
     from callbacks import build_historical_view
     df = _multi_year_df(n_years=5)
-    fig, caption = build_historical_view(df, wy=2026, basin='Columbia River Basin')
+    fig, caption = build_historical_view(df, wy=2026, huc='17')
     # 3 band pairs (6) + median (1) + current year (1)
     assert len(fig.data) == 8
     assert 'SNODAS (~1 km) envelope from 5 water years' in caption
@@ -188,7 +189,7 @@ def test_historical_view_builds_envelope_with_enough_years():
 def test_historical_view_defaults_basin_when_none():
     from callbacks import build_historical_view
     df = _multi_year_df(n_years=5)
-    fig, caption = build_historical_view(df, wy=2026, basin=None)
+    fig, caption = build_historical_view(df, wy=2026, huc=None)
     assert len(fig.data) == 8
 
 
@@ -211,9 +212,43 @@ def test_build_historical_view_labels_dataset(tmp_path):
     for wy in (2004, 2005, 2006, 2007):
         for day in ("01-10", "01-11", "01-12"):
             rows.append({"date": pd.Timestamp(f"{wy}-{day}"),
-                         "basin": "Columbia River Basin",
+                         "huc": "17", "basin": "Columbia River Basin",
                          "total_swe_volume_km3": 1.0 + wy % 3, "wy": wy})
     df = pd.DataFrame(rows)
     fig, caption = callbacks.build_historical_view(
-        df, 2026, "Columbia River Basin", dataset="swann")
+        df, 2026, "17", dataset="swann")
     assert "SWANN (4 km)" in fig.layout.title.text
+
+
+def test_build_historical_view_by_huc_code(tmp_path):
+    import pandas as pd
+    from datetime import datetime
+    import callbacks, climatology
+    from timeseries import append_volumes
+
+    band = pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [1.0],
+    })
+    for yr in (2004, 2005, 2006, 2007):
+        for day in (10, 11, 12):
+            append_volumes(datetime(yr, 1, day), {"170602": band},
+                           {"170602": "Salmon"}, tmp_path)
+    df = climatology.load_all_water_years(tmp_path)
+    fig, caption = callbacks.build_historical_view(df, 2026, "170602")
+    assert "Salmon" in fig.layout.title.text
+    assert "Salmon" in caption or "170602" in caption
+
+
+def test_trends_drilldown_filters_huc6_children():
+    import pandas as pd
+    import callbacks
+
+    df = pd.DataFrame({
+        "date": pd.to_datetime(["2026-01-01"] * 4),
+        "huc": ["17", "1706", "170602", "170300"],
+        "basin": ["Columbia River Basin", "Lower Snake", "Salmon", "Yakima"],
+        "total_swe_volume_km3": [10.0, 3.0, 1.5, 0.7],
+    })
+    children = callbacks.huc6_children(df, "1706")
+    assert set(children["huc"]) == {"170602"}

@@ -57,9 +57,46 @@ def test_dataset_selector_present_with_snodas_default():
     radio = find(layout, "dataset-select")
     assert radio is not None
     assert radio.value == "snodas"
-    assert {o["value"] for o in radio.options} == {"snodas", "swann"}
+    # SWANN dormant (2026-07-22 HUC6 redesign): options are SNODAS-only while
+    # the radio is hidden — see test_dataset_radio_snodas_only_and_hidden.
+    assert {o["value"] for o in radio.options} == {"snodas"}
 
     picker = find(layout, "date-picker")
     assert picker.min_date_allowed is not None
 
     assert find(layout, "snowpack-footnote") is not None
+
+
+def _find(component, cid):
+    if getattr(component, "id", None) == cid:
+        return component
+    children = getattr(component, "children", None)
+    if children is None:
+        return None
+    if not isinstance(children, (list, tuple)):
+        children = [children]
+    for child in children:
+        if hasattr(child, "to_plotly_json"):
+            found = _find(child, cid)
+            if found is not None:
+                return found
+    return None
+
+
+def test_drilldown_selector_and_huc6_graphs_present():
+    from layout import get_layout
+    layout = get_layout()
+    drill = _find(layout, "huc4-drill")
+    assert drill is not None and drill.value == "1706"
+    assert len(drill.options) == 12
+    assert any("Lower Snake" in o["label"] for o in drill.options)
+    for cid in ("huc6-graph", "huc6-volume-graph", "huc6-timeseries-graph"):
+        assert _find(layout, cid) is not None, cid
+
+
+def test_dataset_radio_snodas_only_and_hidden():
+    from layout import get_layout
+    radio = _find(get_layout(), "dataset-select")
+    assert radio is not None and radio.value == "snodas"
+    assert [o["value"] for o in radio.options] == ["snodas"]
+    assert radio.style.get("display") == "none"

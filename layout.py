@@ -5,6 +5,13 @@ from dash import dcc, html
 import datasets
 
 
+def _huc4_drill_options() -> list:
+    from basin_loader import load_huc4
+    g = load_huc4()
+    return [{'label': f"{r.huc4} — {r.name}", 'value': r.huc4}
+            for r in sorted(g.itertuples(), key=lambda r: r.huc4)]
+
+
 def get_layout() -> html.Div:
     today = date.today().isoformat()
     return html.Div([
@@ -19,12 +26,14 @@ def get_layout() -> html.Div:
             dcc.RadioItems(
                 id='dataset-select',
                 options=[
+                    # SWANN dormant (2026-07-22 HUC6 redesign): to re-enable, add back
+                    #   {'label': datasets.get('swann')['label'], 'value': 'swann'},
+                    # and remove display:none. All dataset= machinery remains wired.
                     {'label': datasets.get('snodas')['label'], 'value': 'snodas'},
-                    {'label': datasets.get('swann')['label'], 'value': 'swann'},
                 ],
                 value='snodas',
                 inline=True,
-                style={'fontSize': '0.85rem', 'color': '#333'},
+                style={'fontSize': '0.85rem', 'color': '#333', 'display': 'none'},
                 inputStyle={'marginRight': '0.3rem', 'marginLeft': '0.9rem'},
             ),
         ], style={
@@ -115,6 +124,27 @@ def get_layout() -> html.Div:
                             ], className='chart-pair',
                                style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
                             html.Div([
+                                html.Label('HUC6 drill-down',
+                                           style={'fontWeight': 'bold',
+                                                  'fontSize': '0.85rem',
+                                                  'marginRight': '0.5rem'}),
+                                dcc.Dropdown(
+                                    id='huc4-drill',
+                                    options=_huc4_drill_options(),
+                                    value='1706',
+                                    clearable=False,
+                                    style={'width': '340px', 'fontSize': '0.85rem'},
+                                ),
+                            ], style={'display': 'flex', 'alignItems': 'center',
+                                      'margin': '0.4rem 0'}),
+                            html.Div([
+                                dcc.Graph(id='huc6-graph', style={'flex': '1', 'minWidth': '0'},
+                                          responsive=True, config={'displayModeBar': False}),
+                                dcc.Graph(id='huc6-volume-graph', style={'flex': '1', 'minWidth': '0'},
+                                          responsive=True, config={'displayModeBar': False}),
+                            ], className='chart-pair',
+                               style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
+                            html.Div([
                                 html.P([
                                     html.Strong('Data: '),
                                     datasets.get('snodas')['footnote'],
@@ -138,6 +168,9 @@ def get_layout() -> html.Div:
                             dcc.Graph(id='huc4-timeseries-graph', className='timeseries-graph',
                                       style={'height': '45vh'}, responsive=True,
                                       config={'displayModeBar': False}),
+                            dcc.Graph(id='huc6-timeseries-graph', className='timeseries-graph',
+                                      style={'height': '45vh'}, responsive=True,
+                                      config={'displayModeBar': False}),
                         ], style={'padding': '1rem'}),
                     ]),
                     dcc.Tab(label='Historical', value='historical', children=[
@@ -148,8 +181,8 @@ def get_layout() -> html.Div:
                                 dcc.Dropdown(
                                     id='historical-basin',
                                     options=[{'label': 'Columbia River Basin',
-                                              'value': 'Columbia River Basin'}],
-                                    value='Columbia River Basin',
+                                              'value': '17'}],
+                                    value='17',
                                     clearable=False,
                                     style={'width': '320px', 'fontSize': '0.85rem'},
                                 ),
