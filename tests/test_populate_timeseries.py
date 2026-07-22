@@ -263,6 +263,26 @@ def test_swann_backfill_corrupt_wy_file_does_not_abort_run(tmp_path):
     assert download_calls == [2019, 2020]
 
 
+def test_main_invalid_end_date_exits_with_friendly_message(monkeypatch, capsys):
+    """--end with an unparsable date must print the same friendly
+    ERROR/YYYY-MM-DD message --start already gets, and exit(1) — not raise a
+    raw ValueError traceback."""
+    import pytest
+    import populate_timeseries
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["populate_timeseries.py", "--end", "not-a-date"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        populate_timeseries.main()
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert 'invalid --end date "not-a-date"' in captured.err
+    assert 'YYYY-MM-DD' in captured.err
+
+
 def test_stage_dir_and_end_args():
     import populate_timeseries
     p = populate_timeseries.build_parser()

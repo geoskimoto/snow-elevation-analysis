@@ -39,11 +39,18 @@ def load_band_cache(date_key: str, cache_dir: Path,
                     dataset: str = 'snodas') -> tuple[dict, dict] | None:
     """Return (bands_by_huc, names) or None on miss. Old-schema files
     (pre-HUC6, no 'huc' column) read as a miss so stale basin sets are
-    recomputed rather than reused."""
+    recomputed rather than reused. A corrupt/unreadable cache file (e.g.
+    truncated by a kill mid-save_band_cache) also reads as a miss — the
+    bad file is deleted so the resume path self-heals instead of wedging
+    on the same date every retry."""
     path = _cache_path(date_key, cache_dir, dataset)
     if not path.exists():
         return None
-    df = pd.read_parquet(path)
+    try:
+        df = pd.read_parquet(path)
+    except Exception:
+        path.unlink(missing_ok=True)
+        return None
     if 'huc' not in df.columns:
         return None
     bands_by_huc = {

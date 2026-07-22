@@ -86,8 +86,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--dataset',
         choices=('snodas', 'swann', 'both'),
-        default='both',
-        help='Which dataset(s) to process (default: both).'
+        default='snodas',
+        help='Which dataset(s) to process (default: snodas; SWANN is '
+             'dormant — pass --dataset both to re-enable dual processing).'
     )
     parser.add_argument(
         '--discard-raster',

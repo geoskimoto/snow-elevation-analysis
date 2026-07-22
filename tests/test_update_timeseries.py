@@ -59,7 +59,7 @@ def test_process_dataset_skips_when_band_cache_current(tmp_path, monkeypatch, qu
 
 def test_main_dataset_choices():
     parser = update_timeseries.build_parser()
-    assert parser.parse_args([]).dataset == "both"
+    assert parser.parse_args([]).dataset == "snodas"
     assert parser.parse_args(["--dataset", "swann"]).dataset == "swann"
     with pytest.raises(SystemExit):
         parser.parse_args(["--dataset", "modis"])

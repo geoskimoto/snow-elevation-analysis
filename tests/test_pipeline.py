@@ -62,6 +62,23 @@ def test_load_band_cache_returns_none_if_missing(tmp_path):
     assert result is None
 
 
+def test_load_band_cache_corrupt_file_is_miss_and_self_heals(tmp_path):
+    """A truncated/corrupt cache parquet (e.g. from a kill mid-save during a
+    backfill) must read as a cache miss, and the bad file must be deleted so
+    the next resume attempt recomputes instead of hitting the same error
+    forever."""
+    from pipeline import load_band_cache, _cache_path
+
+    path = _cache_path('20240401', tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b'not a parquet')
+
+    result = load_band_cache('20240401', tmp_path)
+
+    assert result is None
+    assert not path.exists()
+
+
 def test_run_pipeline_returns_figures_on_success(tmp_path, sample_bands_by_basin, fake_basins):
     from pipeline import run_pipeline
 

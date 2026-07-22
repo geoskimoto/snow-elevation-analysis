@@ -365,7 +365,12 @@ def main() -> None:
         print(f'ERROR: invalid --start date "{args.start}"; use YYYY-MM-DD', file=sys.stderr)
         sys.exit(1)
 
-    end = date.fromisoformat(args.end) if args.end else date.today() - timedelta(days=1)
+    try:
+        end = date.fromisoformat(args.end) if args.end else date.today() - timedelta(days=1)
+    except ValueError:
+        print(f'ERROR: invalid --end date "{args.end}"; use YYYY-MM-DD', file=sys.stderr)
+        sys.exit(1)
+
     if start > end:
         print(f'Start date {start} is after end date ({end}); nothing to do.')
         sys.exit(0)
