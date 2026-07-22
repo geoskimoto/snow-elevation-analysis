@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 import climatology
+from timeseries import append_volumes
 
 
 # ---------------------------------------------------------------------------
@@ -16,12 +17,20 @@ import climatology
 # ---------------------------------------------------------------------------
 
 def _write_wy(cache_dir: Path, wy: int, rows: list[dict]) -> None:
-    """Write a WY{wy}_volume.parquet from a list of {date, basin, vol} dicts."""
-    ts_dir = cache_dir / 'timeseries'
-    ts_dir.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame(rows)
-    df['date'] = pd.to_datetime(df['date'])
-    df.to_parquet(ts_dir / f'WY{wy}_volume.parquet', index=False)
+    """Seed a WY{wy}_volume.parquet via append_volumes from a list of
+    {date, basin, total_swe_volume_km3} dicts (optionally 'huc'; defaults to
+    the 'basin' value when omitted, i.e. no name/code collision in play)."""
+    by_date: dict = {}
+    for row in rows:
+        by_date.setdefault(row['date'], []).append(row)
+    for date_str, day_rows in by_date.items():
+        bands = {}
+        names = {}
+        for row in day_rows:
+            huc = row.get('huc', row['basin'])
+            names[huc] = row['basin']
+            bands[huc] = pd.DataFrame({'total_swe_volume_km3': [row['total_swe_volume_km3']]})
+        append_volumes(pd.Timestamp(date_str).to_pydatetime(), bands, names, cache_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +81,7 @@ class TestLoadAllWaterYears:
     def test_empty_when_no_files(self, tmp_path):
         df = climatology.load_all_water_years(tmp_path)
         assert df.empty
-        assert list(df.columns) == ['date', 'basin', 'total_swe_volume_km3', 'wy']
+        assert list(df.columns) == ['date', 'huc', 'basin', 'total_swe_volume_km3', 'wy']
 
     def test_concats_multiple_years_with_wy_tag(self, tmp_path):
         _write_wy(tmp_path, 2024, [{'date': '2024-01-15', 'basin': 'B', 'total_swe_volume_km3': 1.0}])
@@ -93,16 +102,15 @@ class TestLoadAllWaterYears:
 # ---------------------------------------------------------------------------
 
 class TestComputeClimatology:
-    def _three_year_frame(self) -> pd.DataFrame:
+    def _three_year_frame(self, tmp_path: Path) -> pd.DataFrame:
         # Same calendar day (Jan 15) across 3 historical years + 1 current year.
-        rows = []
         for wy, vol in [(2023, 10.0), (2024, 20.0), (2025, 30.0), (2026, 99.0)]:
-            rows.append({'date': pd.Timestamp(f'{wy}-01-15'), 'basin': 'B',
-                         'total_swe_volume_km3': vol, 'wy': wy})
-        return pd.DataFrame(rows)
+            bands = {'B': pd.DataFrame({'total_swe_volume_km3': [vol]})}
+            append_volumes(datetime(wy, 1, 15), bands, {'B': 'B'}, tmp_path)
+        return climatology.load_all_water_years(tmp_path)
 
-    def test_excludes_current_wy(self):
-        df = self._three_year_frame()
+    def test_excludes_current_wy(self, tmp_path):
+        df = self._three_year_frame(tmp_path)
         clim = climatology.compute_climatology(df, 'B', current_wy=2026)
         row = clim[clim['dow'] == climatology.day_of_water_year(date(2026, 1, 15))].iloc[0]
         # median of [10, 20, 30] == 20; the current-year 99 must be excluded.
@@ -110,14 +118,14 @@ class TestComputeClimatology:
         assert row['max'] == pytest.approx(30.0)
         assert row['n'] == 3
 
-    def test_percentiles_ordered(self):
-        df = self._three_year_frame()
+    def test_percentiles_ordered(self, tmp_path):
+        df = self._three_year_frame(tmp_path)
         clim = climatology.compute_climatology(df, 'B', current_wy=2026).iloc[0]
         assert clim['min'] <= clim['p10'] <= clim['p25'] <= clim['p50']
         assert clim['p50'] <= clim['p75'] <= clim['p90'] <= clim['max']
 
-    def test_empty_for_unknown_basin(self):
-        df = self._three_year_frame()
+    def test_empty_for_unknown_basin(self, tmp_path):
+        df = self._three_year_frame(tmp_path)
         assert climatology.compute_climatology(df, 'Nope', current_wy=2026).empty
 
     def test_empty_frame_input(self):
@@ -130,31 +138,35 @@ class TestComputeClimatology:
 # ---------------------------------------------------------------------------
 
 class TestCurrentSeries:
-    def test_returns_only_current_wy(self):
-        df = pd.DataFrame([
-            {'date': pd.Timestamp('2025-01-15'), 'basin': 'B', 'total_swe_volume_km3': 5.0, 'wy': 2025},
-            {'date': pd.Timestamp('2026-01-15'), 'basin': 'B', 'total_swe_volume_km3': 7.0, 'wy': 2026},
-        ])
+    def test_returns_only_current_wy(self, tmp_path):
+        append_volumes(datetime(2025, 1, 15), {'B': pd.DataFrame({'total_swe_volume_km3': [5.0]})},
+                       {'B': 'B'}, tmp_path)
+        append_volumes(datetime(2026, 1, 15), {'B': pd.DataFrame({'total_swe_volume_km3': [7.0]})},
+                       {'B': 'B'}, tmp_path)
+        df = climatology.load_all_water_years(tmp_path)
         cur = climatology.current_series(df, 'B', current_wy=2026)
         assert len(cur) == 1
         assert cur.iloc[0]['total_swe_volume_km3'] == pytest.approx(7.0)
 
-    def test_sorted_by_dow(self):
-        df = pd.DataFrame([
-            {'date': pd.Timestamp('2026-03-01'), 'basin': 'B', 'total_swe_volume_km3': 3.0, 'wy': 2026},
-            {'date': pd.Timestamp('2025-11-01'), 'basin': 'B', 'total_swe_volume_km3': 1.0, 'wy': 2026},
-        ])
+    def test_sorted_by_dow(self, tmp_path):
+        append_volumes(datetime(2026, 3, 1), {'B': pd.DataFrame({'total_swe_volume_km3': [3.0]})},
+                       {'B': 'B'}, tmp_path)
+        append_volumes(datetime(2025, 11, 1), {'B': pd.DataFrame({'total_swe_volume_km3': [1.0]})},
+                       {'B': 'B'}, tmp_path)
+        df = climatology.load_all_water_years(tmp_path)
         cur = climatology.current_series(df, 'B', current_wy=2026)
         assert list(cur['dow']) == sorted(cur['dow'])
 
 
 class TestNHistoricalYears:
-    def test_counts_excluding_current(self):
-        df = pd.DataFrame([
-            {'date': pd.Timestamp('2023-01-15'), 'basin': 'B', 'total_swe_volume_km3': 1.0, 'wy': 2023},
-            {'date': pd.Timestamp('2024-01-15'), 'basin': 'B', 'total_swe_volume_km3': 1.0, 'wy': 2024},
-            {'date': pd.Timestamp('2026-01-15'), 'basin': 'B', 'total_swe_volume_km3': 1.0, 'wy': 2026},
-        ])
+    def test_counts_excluding_current(self, tmp_path):
+        append_volumes(datetime(2023, 1, 15), {'B': pd.DataFrame({'total_swe_volume_km3': [1.0]})},
+                       {'B': 'B'}, tmp_path)
+        append_volumes(datetime(2024, 1, 15), {'B': pd.DataFrame({'total_swe_volume_km3': [1.0]})},
+                       {'B': 'B'}, tmp_path)
+        append_volumes(datetime(2026, 1, 15), {'B': pd.DataFrame({'total_swe_volume_km3': [1.0]})},
+                       {'B': 'B'}, tmp_path)
+        df = climatology.load_all_water_years(tmp_path)
         assert climatology.n_historical_years(df, 'B', current_wy=2026) == 2
 
 
@@ -163,24 +175,23 @@ class TestNHistoricalYears:
 # ---------------------------------------------------------------------------
 
 class TestSummarizeCurrent:
-    def test_pct_of_median_and_rank(self):
-        rows = []
+    def test_pct_of_median_and_rank(self, tmp_path):
         for wy, vol in [(2023, 10.0), (2024, 20.0), (2025, 30.0)]:
-            rows.append({'date': pd.Timestamp(f'{wy}-01-15'), 'basin': 'B',
-                         'total_swe_volume_km3': vol, 'wy': wy})
-        rows.append({'date': pd.Timestamp('2026-01-15'), 'basin': 'B',
-                     'total_swe_volume_km3': 20.0, 'wy': 2026})
-        df = pd.DataFrame(rows)
+            append_volumes(datetime(wy, 1, 15), {'B': pd.DataFrame({'total_swe_volume_km3': [vol]})},
+                           {'B': 'B'}, tmp_path)
+        append_volumes(datetime(2026, 1, 15), {'B': pd.DataFrame({'total_swe_volume_km3': [20.0]})},
+                       {'B': 'B'}, tmp_path)
+        df = climatology.load_all_water_years(tmp_path)
         summary = climatology.summarize_current(df, 'B', current_wy=2026)
         assert summary['pct_of_median'] == pytest.approx(100.0)  # 20 vs median 20
         # Two historical years (10, 20) are < 20? No: 10 < 20 only -> rank 2.
         assert summary['rank_from_bottom'] == 2
         assert summary['total_years'] == 4
 
-    def test_none_without_current_data(self):
-        df = pd.DataFrame([
-            {'date': pd.Timestamp('2025-01-15'), 'basin': 'B', 'total_swe_volume_km3': 1.0, 'wy': 2025},
-        ])
+    def test_none_without_current_data(self, tmp_path):
+        append_volumes(datetime(2025, 1, 15), {'B': pd.DataFrame({'total_swe_volume_km3': [1.0]})},
+                       {'B': 'B'}, tmp_path)
+        df = climatology.load_all_water_years(tmp_path)
         assert climatology.summarize_current(df, 'B', current_wy=2026) is None
 
 
@@ -203,3 +214,32 @@ def test_load_all_water_years_swann_reads_subdir_only(tmp_path):
     assert sorted(swann["wy"].unique()) == [1999]
     snodas = climatology.load_all_water_years(tmp_path)
     assert sorted(snodas["wy"].unique()) == [2026]
+
+
+def test_climatology_huc_keyed_and_collision_safe(tmp_path):
+    import pandas as pd
+    from datetime import datetime
+    import climatology
+    from timeseries import append_volumes
+
+    band = pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [1.0],
+    })
+    names = {"1703": "Yakima", "170300": "Yakima"}
+    for yr in (2004, 2005, 2006, 2007):
+        for day in (10, 11, 12):
+            bands = {"1703": band, "170300": band * 2}
+            append_volumes(datetime(yr, 1, day), bands, names, tmp_path)
+
+    df = climatology.load_all_water_years(tmp_path)
+    assert "huc" in df.columns
+
+    clim4 = climatology.compute_climatology(df, "1703", 2026)
+    clim6 = climatology.compute_climatology(df, "170300", 2026)
+    assert not clim4.empty and not clim6.empty
+    # the two same-named basins have different volumes -> different medians
+    assert clim6["p50"].iloc[0] > clim4["p50"].iloc[0]
+    assert climatology.n_historical_years(df, "1703", 2026) == 4
+    assert climatology.display_name(df, "1703") == "Yakima"
+    assert climatology.display_name(df, "9999") == ""

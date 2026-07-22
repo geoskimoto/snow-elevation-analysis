@@ -21,15 +21,17 @@ day_of_water_year(date)   -- 1..365 position within the water year
                              non-leap years align on a common (month, day) axis.
 water_day_ref(dow)        -- map a day-of-water-year onto a fixed reference
                              calendar so the x-axis renders as Oct -> Sep.
-compute_climatology(df, basin, current_wy)
+compute_climatology(df, huc, current_wy)
                           -- per-day percentile envelope over all years except
                              `current_wy`.
-current_series(df, basin, current_wy)
+current_series(df, huc, current_wy)
                           -- the current water year's line, day-of-WY indexed.
-n_historical_years(df, basin, current_wy)
-                          -- count of prior water years available for `basin`.
-summarize_current(df, basin, current_wy)
+n_historical_years(df, huc, current_wy)
+                          -- count of prior water years available for `huc`.
+summarize_current(df, huc, current_wy)
                           -- latest-day headline stats (% of median, rank).
+display_name(df, huc)     -- the `basin` display name for a huc code ('' if
+                             absent).
 """
 
 from __future__ import annotations
@@ -44,12 +46,12 @@ import pandas as pd
 # Constants
 # ---------------------------------------------------------------------------
 
-_HUC2_KEY = 'Columbia River Basin'
+_HUC2_CODE = '17'
 
 # Minimum prior water years needed before a percentile envelope is meaningful.
 MIN_YEARS_FOR_ENVELOPE = 3
 
-_COLUMNS = ['date', 'basin', 'total_swe_volume_km3', 'wy']
+_COLUMNS = ['date', 'huc', 'basin', 'total_swe_volume_km3', 'wy']
 
 _WY_FILE_RE = re.compile(r'WY(\d{4})_volume\.parquet$')
 
@@ -82,6 +84,7 @@ _REF_WY_START = date(2022, 10, 1)  # WY2023 is non-leap
 def _empty_df() -> pd.DataFrame:
     return pd.DataFrame({
         'date': pd.Series([], dtype='datetime64[ns]'),
+        'huc': pd.Series([], dtype=str),
         'basin': pd.Series([], dtype=str),
         'total_swe_volume_km3': pd.Series([], dtype=float),
         'wy': pd.Series([], dtype='int64'),
@@ -146,8 +149,8 @@ def load_all_water_years(cache_dir: Path, dataset: str = 'snodas') -> pd.DataFra
     Returns
     -------
     pd.DataFrame
-        Columns ``date, basin, total_swe_volume_km3, wy``. Empty (with those
-        columns) if no parquet files exist.
+        Columns ``date, huc, basin, total_swe_volume_km3, wy``. Empty (with
+        those columns) if no parquet files exist.
     """
     ts_dir = Path(cache_dir) / 'timeseries'
     if dataset != 'snodas':
@@ -163,7 +166,7 @@ def load_all_water_years(cache_dir: Path, dataset: str = 'snodas') -> pd.DataFra
         df = pd.read_parquet(path)
         df['date'] = pd.to_datetime(df['date'])
         df['wy'] = int(m.group(1))
-        frames.append(df[['date', 'basin', 'total_swe_volume_km3', 'wy']])
+        frames.append(df[['date', 'huc', 'basin', 'total_swe_volume_km3', 'wy']])
 
     if not frames:
         return _empty_df()
@@ -172,27 +175,27 @@ def load_all_water_years(cache_dir: Path, dataset: str = 'snodas') -> pd.DataFra
     return combined[_COLUMNS]
 
 
-def n_historical_years(df: pd.DataFrame, basin: str, current_wy: int) -> int:
-    """Count water years (excluding *current_wy*) that have data for *basin*."""
+def n_historical_years(df: pd.DataFrame, huc: str, current_wy: int) -> int:
+    """Count water years (excluding *current_wy*) that have data for *huc*."""
     if df.empty:
         return 0
-    hist = df[(df['basin'] == basin) & (df['wy'] != current_wy)]
+    hist = df[(df['huc'] == huc) & (df['wy'] != current_wy)]
     return int(hist['wy'].nunique())
 
 
-def compute_climatology(df: pd.DataFrame, basin: str, current_wy: int) -> pd.DataFrame:
+def compute_climatology(df: pd.DataFrame, huc: str, current_wy: int) -> pd.DataFrame:
     """Per-day percentile envelope over all water years except *current_wy*.
 
     Returns
     -------
     pd.DataFrame
         Columns ``dow, ref_date, min, p10, p25, p50, p75, p90, max, n`` sorted
-        by ``dow``. Empty if *basin* has no historical data.
+        by ``dow``. Empty if *huc* has no historical data.
     """
     if df.empty:
         return _empty_climatology()
 
-    hist = df[(df['basin'] == basin) & (df['wy'] != current_wy)]
+    hist = df[(df['huc'] == huc) & (df['wy'] != current_wy)]
     if hist.empty:
         return _empty_climatology()
 
@@ -213,8 +216,8 @@ def compute_climatology(df: pd.DataFrame, basin: str, current_wy: int) -> pd.Dat
     return clim[['dow', 'ref_date', 'min', 'p10', 'p25', 'p50', 'p75', 'p90', 'max', 'n']]
 
 
-def current_series(df: pd.DataFrame, basin: str, current_wy: int) -> pd.DataFrame:
-    """Return *current_wy*'s line for *basin*, day-of-water-year indexed.
+def current_series(df: pd.DataFrame, huc: str, current_wy: int) -> pd.DataFrame:
+    """Return *current_wy*'s line for *huc*, day-of-water-year indexed.
 
     Columns ``dow, ref_date, date, total_swe_volume_km3`` sorted by ``dow``.
     """
@@ -222,7 +225,7 @@ def current_series(df: pd.DataFrame, basin: str, current_wy: int) -> pd.DataFram
     if df.empty:
         return pd.DataFrame({c: pd.Series([], dtype='float64') for c in cols})
 
-    cur = df[(df['basin'] == basin) & (df['wy'] == current_wy)]
+    cur = df[(df['huc'] == huc) & (df['wy'] == current_wy)]
     if cur.empty:
         return pd.DataFrame({c: pd.Series([], dtype='float64') for c in cols})
 
@@ -230,15 +233,15 @@ def current_series(df: pd.DataFrame, basin: str, current_wy: int) -> pd.DataFram
     return cur[cols]
 
 
-def summarize_current(df: pd.DataFrame, basin: str, current_wy: int) -> dict | None:
-    """Headline stats for *basin*'s most recent current-year day.
+def summarize_current(df: pd.DataFrame, huc: str, current_wy: int) -> dict | None:
+    """Headline stats for *huc*'s most recent current-year day.
 
     Returns a dict with ``as_of`` (Timestamp), ``current_km3``, ``median_km3``,
     ``pct_of_median``, ``rank_from_bottom`` and ``total_years`` (historical +
     current). Returns ``None`` when there is no current data or no historical
     data at the latest day-of-water-year.
     """
-    cur = current_series(df, basin, current_wy)
+    cur = current_series(df, huc, current_wy)
     if cur.empty:
         return None
 
@@ -246,7 +249,7 @@ def summarize_current(df: pd.DataFrame, basin: str, current_wy: int) -> dict | N
     dow = int(latest['dow'])
     current_val = float(latest['total_swe_volume_km3'])
 
-    hist = df[(df['basin'] == basin) & (df['wy'] != current_wy)]
+    hist = df[(df['huc'] == huc) & (df['wy'] != current_wy)]
     if hist.empty:
         return None
     hist = _with_dow(hist)
@@ -264,3 +267,11 @@ def summarize_current(df: pd.DataFrame, basin: str, current_wy: int) -> dict | N
         'rank_from_bottom': rank_from_bottom,
         'total_years': int(at_day.shape[0]) + 1,
     }
+
+
+def display_name(df: pd.DataFrame, huc: str) -> str:
+    """Display name for a huc code, from the data itself ('' if absent)."""
+    if df.empty:
+        return ''
+    rows = df.loc[df['huc'] == huc, 'basin']
+    return str(rows.iloc[0]) if len(rows) else ''
