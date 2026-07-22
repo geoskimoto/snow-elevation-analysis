@@ -25,6 +25,9 @@ def fetch(layer: int, field: str, where: str) -> bytes:
         "outFields": f"{field},name,areasqkm,states",
         "returnGeometry": "true",
         "outSR": "4326",
+        # Simplification tolerance ~100 m — far below the ~1 km SNODAS grid,
+        # keeps committed files small.
+        "maxAllowableOffset": "0.001",
         "f": "geojson",
     })
     url = f"{BASE}/{layer}/query?{params}"
@@ -44,7 +47,14 @@ def main() -> None:
                   file=sys.stderr)
             sys.exit(1)
         if not g.geometry.is_valid.all():
-            print(f"ERROR: {filename}: invalid geometries", file=sys.stderr)
+            g.geometry = g.geometry.buffer(0)
+            g.to_file(path, driver="GeoJSON")
+            if not g.geometry.is_valid.all():
+                print(f"ERROR: {filename}: invalid geometries", file=sys.stderr)
+                sys.exit(1)
+        if path.stat().st_size > 5_000_000:
+            print(f"ERROR: {filename}: {path.stat().st_size} bytes — "
+                  f"simplification not applied?", file=sys.stderr)
             sys.exit(1)
         print(f"{filename}: {len(g)} features OK")
 
