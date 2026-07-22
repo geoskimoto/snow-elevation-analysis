@@ -5,7 +5,7 @@
 import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -23,23 +23,44 @@ def _bands() -> dict:
     return {'Columbia River Basin': df}
 
 
+def _basins_names():
+    """Minimal 1-basin frame for the SWANN-backfill tests below.
+
+    These tests exercise the download-skip / mismatch-cleanup / corrupt-file
+    paths of _run_swann_backfill, none of which ever reach basins.geometry
+    (they bail out, or _swann_process_day is mocked out, before that). A
+    single fake huc keeps the n_basins completeness threshold equivalent to
+    the pre-migration `1 + len(huc4)` with an empty huc4 frame, without
+    needing all 35 real basin geometries."""
+    basins = pd.DataFrame({'huc': ['17'], 'name': ['Columbia River Basin'],
+                          'geometry': [None]})
+    names = dict(zip(basins['huc'], basins['name']))
+    return basins, names
+
+
 def _run_process_date(tmp_path, discard_raster):
     """Drive _process_date with all I/O mocked; return the fake SWE tif path."""
+    from basin_loader import load_all_basins
+
     swe_tif = tmp_path / '2026' / '01' / '20260115_swe.tif'
     swe_tif.parent.mkdir(parents=True, exist_ok=True)
     swe_tif.write_bytes(b'fake-raster')
 
     logger = logging.getLogger('test_populate')
+    # _process_date now iterates basins.itertuples() over the real 35-basin
+    # frame (Task 6 migration) rather than a separate huc2/huc4 pair, so a
+    # MagicMock() stand-in for huc2 no longer works here.
+    basins = load_all_basins()
+    names = dict(zip(basins['huc'], basins['name']))
     with patch.object(pt, 'load_band_cache', return_value=None), \
          patch.object(pt, 'fetch_swe', return_value=swe_tif), \
          patch.object(pt, 'get_aligned_dem', return_value=tmp_path / 'dem.tif'), \
          patch.object(pt, 'compute_bands', return_value=_bands()['Columbia River Basin']), \
          patch.object(pt, 'save_band_cache'), \
          patch.object(pt, 'append_volumes'):
-        huc4 = pd.DataFrame({'name': [], 'geometry': []})
         ok = pt._process_date(
             date(2026, 1, 15), tmp_path, tmp_path / 'dem.tif',
-            MagicMock(), huc4, logger, discard_raster=discard_raster,
+            basins, names, logger, discard_raster=discard_raster,
         )
     return ok, swe_tif
 
@@ -133,14 +154,14 @@ def test_swann_backfill_skips_download_when_year_fully_done(tmp_path):
                        tmp_path, dataset='swann')
         d += timedelta(days=1)
 
-    huc4 = pd.DataFrame({'name': [], 'geometry': []})
+    basins, names = _basins_names()
     logger = logging.getLogger('test_populate')
 
     def _boom(*args, **kwargs):
         raise AssertionError('download_wy_nc must not be called for a fully-done year')
 
     with patch.object(pt.swann_fetcher, 'download_wy_nc', side_effect=_boom):
-        failed = pt._run_swann_backfill(start, end, tmp_path, MagicMock(), huc4,
+        failed = pt._run_swann_backfill(start, end, tmp_path, basins, names,
                                         logger, discard=False)
 
     assert failed == []
@@ -160,7 +181,7 @@ def test_swann_backfill_mismatch_cleans_up_wy_nc(tmp_path):
     wy_nc = swann_dir / f'UA_SWE_Depth_WY{wy}.nc'
     wy_nc.write_bytes(b'fake-nc')
 
-    huc4 = pd.DataFrame({'name': [], 'geometry': []})
+    basins, names = _basins_names()
     logger = logging.getLogger('test_populate')
 
     fake_tags = {
@@ -171,7 +192,7 @@ def test_swann_backfill_mismatch_cleans_up_wy_nc(tmp_path):
     with patch.object(pt.swann_fetcher, 'download_wy_nc', return_value=wy_nc), \
          patch.object(pt.rasterio, 'open',
                       return_value=_FakeRasterioSrc(fake_tags, count=3)):  # ... 3 bands
-        failed = pt._run_swann_backfill(start, end, tmp_path, MagicMock(), huc4,
+        failed = pt._run_swann_backfill(start, end, tmp_path, basins, names,
                                         logger, discard=True)
 
     assert date(wy - 1, 10, 1) in failed
@@ -186,7 +207,7 @@ def test_swann_backfill_daily_fallback_cleans_up_failed_day(tmp_path):
     start = date(2024, 10, 1)
     end = date(2024, 10, 1)
 
-    huc4 = pd.DataFrame({'name': [], 'geometry': []})
+    basins, names = _basins_names()
     logger = logging.getLogger('test_populate')
 
     swe_tif = tmp_path / '20241001_swe.tif'
@@ -197,7 +218,7 @@ def test_swann_backfill_daily_fallback_cleans_up_failed_day(tmp_path):
          patch.object(pt.swann_fetcher, 'fetch_swe', return_value=swe_tif), \
          patch.object(pt, 'get_aligned_dem', return_value=tmp_path / 'dem.tif'), \
          patch.object(pt, '_swann_process_day', side_effect=RuntimeError('boom')):
-        failed = pt._run_swann_backfill(start, end, tmp_path, MagicMock(), huc4,
+        failed = pt._run_swann_backfill(start, end, tmp_path, basins, names,
                                         logger, discard=True)
 
     assert failed == [date(2024, 10, 1)]
@@ -215,7 +236,7 @@ def test_swann_backfill_corrupt_wy_file_does_not_abort_run(tmp_path):
     start = date(2019, 1, 1)
     end = date(2020, 1, 3)   # spans WY2019 and WY2020
 
-    huc4 = pd.DataFrame({'name': [], 'geometry': []})
+    basins, names = _basins_names()
     logger = logging.getLogger('test_populate')
 
     download_calls = []
@@ -232,7 +253,7 @@ def test_swann_backfill_corrupt_wy_file_does_not_abort_run(tmp_path):
 
     with patch.object(pt.swann_fetcher, 'download_wy_nc', side_effect=fake_download), \
          patch.object(pt.rasterio, 'open', side_effect=fake_open):
-        failed = pt._run_swann_backfill(start, end, tmp_path, MagicMock(), huc4,
+        failed = pt._run_swann_backfill(start, end, tmp_path, basins, names,
                                         logger, discard=False)
 
     # Both years are marked failed (metadata read raised for each) ...
@@ -240,3 +261,40 @@ def test_swann_backfill_corrupt_wy_file_does_not_abort_run(tmp_path):
     assert date(2019, 10, 1) in failed
     # ... but the loop kept going past year 1: year 2's download was attempted.
     assert download_calls == [2019, 2020]
+
+
+def test_stage_dir_and_end_args():
+    import populate_timeseries
+    p = populate_timeseries.build_parser()
+    a = p.parse_args(["--stage-dir", "/tmp/x", "--end", "2026-07-01"])
+    assert a.stage_dir == "/tmp/x" and a.end == "2026-07-01"
+    assert p.parse_args([]).stage_dir is None
+
+
+def test_process_date_writes_to_stage_dir(tmp_path, monkeypatch):
+    import logging, pandas as pd
+    from datetime import date
+    import populate_timeseries
+    from basin_loader import load_all_basins
+    from timeseries import load_timeseries
+
+    logger = logging.getLogger("t"); logger.addHandler(logging.NullHandler())
+    basins = load_all_basins()
+    names = dict(zip(basins["huc"], basins["name"]))
+    monkeypatch.setattr(populate_timeseries, "fetch_swe",
+                        lambda d, cache_dir: tmp_path / "x.tif")
+    monkeypatch.setattr(populate_timeseries, "get_aligned_dem",
+                        lambda s, dem_cache: tmp_path / "d.tif")
+    monkeypatch.setattr(
+        populate_timeseries, "compute_bands",
+        lambda s, d, g, min_band_area_km2=0.0: pd.DataFrame(
+            {"elev_band_m": [1000], "mean_swe_mm": [50.0],
+             "area_km2": [10.0], "total_swe_volume_km3": [0.001]}))
+
+    stage = tmp_path / "rebuild"
+    ok = populate_timeseries._process_date(
+        date(2026, 1, 15), tmp_path, tmp_path / "dem.tif", basins, names,
+        logger, discard_raster=False, ts_dir=stage)
+    assert ok
+    assert len(load_timeseries(2026, tmp_path, ts_dir=stage)) == 35
+    assert not (tmp_path / "timeseries" / "WY2026_volume.parquet").exists()

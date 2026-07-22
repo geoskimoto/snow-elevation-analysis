@@ -8,16 +8,21 @@ script then continues with the next date rather than aborting.
 
 Usage
 -----
-    python populate_timeseries.py [--start YYYY-MM-DD] [--discard-raster]
+    python populate_timeseries.py [--start YYYY-MM-DD] [--end YYYY-MM-DD]
+                                  [--discard-raster] [--stage-dir PATH]
 
 Options
 -------
 --start YYYY-MM-DD   Override the default start date of 2025-10-01.
                      Useful for resuming a partial run.
+--end YYYY-MM-DD     Last date to process, inclusive (default: yesterday).
 --discard-raster     Delete each CONUS SWE GeoTIFF once its bands are computed.
                      Recommended for the full-record backfill so the run does
                      not accumulate ~65 GB of intermediate rasters; the volume
                      parquet the climatology/trends tabs need is unaffected.
+--stage-dir PATH     Write volume parquets to this directory instead of the
+                     live timeseries dir (staged rebuild); default is None
+                     (live dir).
 
 Exit codes
 ----------
@@ -45,7 +50,7 @@ import rasterio
 import config
 import datasets
 import swann_fetcher
-from basin_loader import load_huc2, load_huc4
+from basin_loader import load_all_basins
 from dem_processor import get_aligned_dem
 from elevation_bands import compute_bands
 from pipeline import load_band_cache, save_band_cache
@@ -56,7 +61,6 @@ from timeseries import append_volumes, load_timeseries, water_year
 # Constants
 # ---------------------------------------------------------------------------
 
-_HUC2_KEY = 'Columbia River Basin'
 _DEFAULT_START = date(2025, 10, 1)
 _MIN_BAND_AREA_KM2 = 100.0
 _LOG_PATH = Path(__file__).parent / 'logs' / 'populate_timeseries.log'
@@ -105,6 +109,11 @@ def build_parser() -> argparse.ArgumentParser:
                              'to daily files for later years.')
     parser.add_argument('--discard-raster', action='store_true',
                         help='Delete each downloaded raster/netCDF after processing.')
+    parser.add_argument('--end', metavar='YYYY-MM-DD', default=None,
+                        help='Last date to process inclusive (default: yesterday).')
+    parser.add_argument('--stage-dir', default=None,
+                        help='Write volume parquets to this directory instead of '
+                             'the live timeseries dir (staged rebuild).')
     return parser
 
 
@@ -138,17 +147,20 @@ def _process_date(
     target: date,
     cache_dir: Path,
     dem_cache: Path,
-    huc2,
-    huc4,
+    basins,
+    names: dict,
     logger: logging.Logger,
     discard_raster: bool = False,
+    ts_dir: Path | None = None,
 ) -> bool:
     """Process a single date.  Returns True on success, False on failure.
 
     When *discard_raster* is set, the cached CONUS SWE GeoTIFF is deleted once
     its elevation bands have been computed.  The climatology/trends features
     only need the (tiny) volume parquet, so this keeps the full-record backfill
-    from parking ~65 GB of intermediate rasters on disk.
+    from parking ~65 GB of intermediate rasters on disk. *ts_dir* (when given)
+    routes the volume parquet write to a staging directory instead of the
+    live timeseries dir (used by the staged rebuild).
     """
     date_key = target.strftime('%Y%m%d')
     dt = datetime(target.year, target.month, target.day)
@@ -156,10 +168,11 @@ def _process_date(
     # Skip if band cache already present (also covers timeseries idempotency)
     cached = load_band_cache(date_key, cache_dir)
     if cached is not None:
+        bands_by_huc, cached_names = cached
         logger.info('%s  SKIP  band cache exists', target)
         # Still append to timeseries in case that step was missed previously
         try:
-            append_volumes(dt, cached, cache_dir)
+            append_volumes(dt, bands_by_huc, cached_names, cache_dir, ts_dir=ts_dir)
         except Exception as exc:
             logger.warning('%s  timeseries append failed (skipped): %s', target, exc)
         return True
@@ -172,24 +185,20 @@ def _process_date(
         dem_tif = get_aligned_dem(swe_tif, dem_cache=dem_cache)
 
         logger.debug('%s  computing elevation bands ...', target)
-        bands_by_basin: dict = {
-            _HUC2_KEY: compute_bands(
-                swe_tif, dem_tif, huc2.geometry[0],
-                min_band_area_km2=_MIN_BAND_AREA_KM2,
-            )
-        }
-        for _, row in huc4.iterrows():
-            bands_by_basin[row['name']] = compute_bands(
+        bands_by_huc = {
+            row.huc: compute_bands(
                 swe_tif, dem_tif, row.geometry,
                 min_band_area_km2=_MIN_BAND_AREA_KM2,
             )
+            for row in basins.itertuples()
+        }
 
-        save_band_cache(bands_by_basin, date_key, cache_dir)
-        append_volumes(dt, bands_by_basin, cache_dir)
+        save_band_cache(bands_by_huc, names, date_key, cache_dir)
+        append_volumes(dt, bands_by_huc, names, cache_dir, ts_dir=ts_dir)
         if discard_raster:
             swe_tif.unlink(missing_ok=True)
             logger.debug('%s  discarded raster %s', target, swe_tif.name)
-        logger.info('%s  OK  (%d basins)', target, len(bands_by_basin))
+        logger.info('%s  OK  (%d basins)', target, len(bands_by_huc))
         return True
 
     except (ConnectionError, OSError, IOError) as exc:
@@ -215,18 +224,16 @@ def _swann_dates_done(wy: int, cache_dir: Path, n_basins: int) -> set:
 
 
 def _swann_process_day(swe_tif: Path, dem_tif: Path, dt: datetime,
-                       huc2, huc4, cache_dir: Path) -> None:
+                       basins, names: dict, cache_dir: Path) -> None:
     """Compute per-basin bands in memory and append volumes (no band cache —
     the full-record backfill only needs the tiny volume parquets; band caches
     build on demand from the Snowpack tab, per the design spec)."""
-    bands_by_basin: dict = {
-        _HUC2_KEY: compute_bands(swe_tif, dem_tif, huc2.geometry[0],
-                                 min_band_area_km2=_MIN_BAND_AREA_KM2)
+    bands_by_huc = {
+        row.huc: compute_bands(swe_tif, dem_tif, row.geometry,
+                               min_band_area_km2=_MIN_BAND_AREA_KM2)
+        for row in basins.itertuples()
     }
-    for _, row in huc4.iterrows():
-        bands_by_basin[row['name']] = compute_bands(
-            swe_tif, dem_tif, row.geometry, min_band_area_km2=_MIN_BAND_AREA_KM2)
-    append_volumes(dt, bands_by_basin, cache_dir, dataset='swann')
+    append_volumes(dt, bands_by_huc, names, cache_dir, dataset='swann')
 
 
 def _swann_needed_dates(wy: int, start: date, end: date) -> list[date]:
@@ -245,12 +252,12 @@ def _swann_needed_dates(wy: int, start: date, end: date) -> list[date]:
 
 
 def _run_swann_backfill(start: date, end: date, cache_dir: Path,
-                        huc2, huc4, logger: logging.Logger,
+                        basins, names: dict, logger: logging.Logger,
                         discard: bool) -> list[date]:
     """Backfill SWANN volumes for [start, end]. Returns failed dates."""
     ds = datasets.get('swann')
     dem_cache = cache_dir / 'dem' / ds['dem_filename']
-    n_basins = 1 + len(huc4)
+    n_basins = len(basins)
     failed: list[date] = []
     tmp_tif = cache_dir / 'swann' / 'wy_extract_tmp.tif'
 
@@ -312,7 +319,7 @@ def _run_swann_backfill(start: date, end: date, cache_dir: Path,
                         swann_fetcher.nc_to_geotiff(wy_nc, tmp_tif, variable='SWE',
                                                     band=band_idx)
                         dem_tif = get_aligned_dem(tmp_tif, dem_cache=dem_cache)
-                        _swann_process_day(tmp_tif, dem_tif, dt, huc2, huc4, cache_dir)
+                        _swann_process_day(tmp_tif, dem_tif, dt, basins, names, cache_dir)
                         logger.info('%s  OK (WY file band %d)', d, band_idx)
                     except Exception as exc:
                         logger.error('%s  ERROR: %s', d, exc)
@@ -327,7 +334,7 @@ def _run_swann_backfill(start: date, end: date, cache_dir: Path,
                     try:
                         swe_tif = swann_fetcher.fetch_swe(dt, cache_dir=cache_dir)
                         dem_tif = get_aligned_dem(swe_tif, dem_cache=dem_cache)
-                        _swann_process_day(swe_tif, dem_tif, dt, huc2, huc4, cache_dir)
+                        _swann_process_day(swe_tif, dem_tif, dt, basins, names, cache_dir)
                         logger.info('%s  OK (daily file)', d)
                     except Exception as exc:
                         logger.error('%s  ERROR: %s', d, exc)
@@ -358,26 +365,27 @@ def main() -> None:
         print(f'ERROR: invalid --start date "{args.start}"; use YYYY-MM-DD', file=sys.stderr)
         sys.exit(1)
 
-    yesterday = date.today() - timedelta(days=1)
-    if start > yesterday:
-        print(f'Start date {start} is after yesterday ({yesterday}); nothing to do.')
+    end = date.fromisoformat(args.end) if args.end else date.today() - timedelta(days=1)
+    if start > end:
+        print(f'Start date {start} is after end date ({end}); nothing to do.')
         sys.exit(0)
 
     logger = _setup_logging()
 
     cache_dir = config.get_cache_dir()
     dem_cache = cache_dir / 'dem' / 'columbia_basin_swe_aligned.tif'
+    ts_dir = Path(args.stage_dir) if args.stage_dir else None
 
     logger.info('=== populate_timeseries START ===')
-    logger.info('date range: %s → %s', start, yesterday)
+    logger.info('date range: %s → %s', start, end)
     logger.info('cache_dir : %s', cache_dir)
 
     logger.info('Loading basin boundaries ...')
-    huc2 = load_huc2()
-    huc4 = load_huc4()
+    basins = load_all_basins()
+    names = dict(zip(basins['huc'], basins['name']))
 
     if args.dataset == 'swann':
-        failed = _run_swann_backfill(start, yesterday, cache_dir, huc2, huc4,
+        failed = _run_swann_backfill(start, end, cache_dir, basins, names,
                                      logger, discard=args.discard_raster)
         logger.info('=== populate_timeseries (swann) DONE — %d failures ===',
                     len(failed))
@@ -386,16 +394,16 @@ def main() -> None:
             sys.exit(1)
         sys.exit(0)
 
-    total_dates = (yesterday - start).days + 1
+    total_dates = (end - start).days + 1
     failed: list[date] = []
 
     current = start
     idx = 0
-    while current <= yesterday:
+    while current <= end:
         idx += 1
         logger.debug('--- [%d/%d] %s ---', idx, total_dates, current)
-        ok = _process_date(current, cache_dir, dem_cache, huc2, huc4, logger,
-                           discard_raster=args.discard_raster)
+        ok = _process_date(current, cache_dir, dem_cache, basins, names, logger,
+                           discard_raster=args.discard_raster, ts_dir=ts_dir)
         if not ok:
             failed.append(current)
         current += timedelta(days=1)

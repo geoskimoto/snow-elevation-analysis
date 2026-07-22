@@ -30,7 +30,7 @@ except ImportError:
 
 import config
 import datasets
-from basin_loader import load_huc2, load_huc4
+from basin_loader import load_all_basins
 from dem_processor import get_aligned_dem
 from elevation_bands import compute_bands
 from pipeline import load_band_cache, save_band_cache
@@ -40,7 +40,6 @@ from timeseries import append_volumes
 # Constants
 # ---------------------------------------------------------------------------
 
-_HUC2_KEY = 'Columbia River Basin'
 _MIN_BAND_AREA_KM2 = 100.0
 _LOG_PATH = Path(__file__).parent / 'logs' / 'update_timeseries.log'
 
@@ -99,12 +98,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def process_dataset(dataset: str, date_arg, cache_dir, huc2, huc4,
+def process_dataset(dataset: str, date_arg, cache_dir, basins,
                     logger: logging.Logger, discard_raster: bool) -> bool:
     """Fetch and process the latest (or given) date for one dataset.
 
     Returns True on success or already-current; False on any error (logged).
     """
+    names = dict(zip(basins['huc'], basins['name']))
     ds = datasets.get(dataset)
     dem_cache = cache_dir / 'dem' / ds['dem_filename']
     try:
@@ -130,10 +130,12 @@ def process_dataset(dataset: str, date_arg, cache_dir, huc2, huc4,
         # Idempotency: if bands for the target date are already cached, we're current.
         cached = load_band_cache(date_key, cache_dir, dataset)
         if cached is not None:
+            bands_by_huc, cached_names = cached
             logger.info('[%s] Band cache already exists for %s — nothing to do.',
                         dataset, target.date())
             try:
-                append_volumes(target, cached, cache_dir, dataset=dataset)
+                append_volumes(target, bands_by_huc, cached_names, cache_dir,
+                               dataset=dataset)
             except Exception as exc:
                 logger.warning('[%s] timeseries append failed (non-fatal): %s',
                                dataset, exc)
@@ -143,23 +145,19 @@ def process_dataset(dataset: str, date_arg, cache_dir, huc2, huc4,
         dem_tif = get_aligned_dem(swe_tif, dem_cache=dem_cache)
 
         logger.info('[%s] Computing elevation bands ...', dataset)
-        bands_by_basin: dict = {
-            _HUC2_KEY: compute_bands(swe_tif, dem_tif, huc2.geometry[0],
-                                     min_band_area_km2=_MIN_BAND_AREA_KM2)
+        bands_by_huc = {
+            row.huc: compute_bands(swe_tif, dem_tif, row.geometry,
+                                   min_band_area_km2=_MIN_BAND_AREA_KM2)
+            for row in basins.itertuples()
         }
-        for _, row in huc4.iterrows():
-            bands_by_basin[row['name']] = compute_bands(
-                swe_tif, dem_tif, row.geometry,
-                min_band_area_km2=_MIN_BAND_AREA_KM2)
-
-        save_band_cache(bands_by_basin, date_key, cache_dir, dataset)
-        append_volumes(target, bands_by_basin, cache_dir, dataset=dataset)
+        save_band_cache(bands_by_huc, names, date_key, cache_dir, dataset)
+        append_volumes(target, bands_by_huc, names, cache_dir, dataset=dataset)
         if discard_raster:
             swe_tif.unlink(missing_ok=True)
             logger.debug('[%s] Discarded raster %s', dataset, swe_tif.name)
 
         logger.info('[%s] Done — %d basins processed for %s.',
-                    dataset, len(bands_by_basin), target.date())
+                    dataset, len(bands_by_huc), target.date())
         return True
 
     except (ConnectionError, OSError, IOError) as exc:
@@ -181,12 +179,11 @@ def main() -> None:
     logger.info('cache_dir: %s', cache_dir)
 
     logger.info('Loading basin boundaries ...')
-    huc2 = load_huc2()
-    huc4 = load_huc4()
+    basins = load_all_basins()
 
     targets = ('snodas', 'swann') if args.dataset == 'both' else (args.dataset,)
     results = {
-        d: process_dataset(d, date_arg, cache_dir, huc2, huc4, logger,
+        d: process_dataset(d, date_arg, cache_dir, basins, logger,
                            discard_raster=args.discard_raster)
         for d in targets
     }
