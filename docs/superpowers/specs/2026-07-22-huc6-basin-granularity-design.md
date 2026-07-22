@@ -6,8 +6,8 @@
 ## Goal
 
 Replace the app's basin structure (HUC2 + custom-split HUC4s) with three
-standard WBD levels — the HUC2 region, its 10 standard HUC4 subregions, and
-its 22 HUC6 basins (33 polygons total) — and recompute all SNODAS volume
+standard WBD levels — the HUC2 region, its 12 standard HUC4 subregions, and
+its 22 HUC6 basins (35 polygons total) — and recompute all SNODAS volume
 statistics for the new set over the full record (WY2004–present).
 
 SWANN is **dormant** for the duration of this work: its UI toggle option is
@@ -24,7 +24,7 @@ the current HUC4 view lumps them into 1706 Lower Snake.
 - New committed basemaps, fetched once from the USGS WBD ArcGIS REST
   service (`hydro.nationalmap.gov/arcgis/rest/services/wbd/MapServer`),
   the same source lineage as the current files:
-  - `data/basemaps/huc4_pnw.geojson` — the **standard** 10 HUC4 subregions
+  - `data/basemaps/huc4_pnw.geojson` — the **standard** 12 HUC4 subregions
     of region 17 (1701–1712), REPLACING the current custom-split file
     (which carries pseudo-codes 1701a/b, 1702a/b).
   - `data/basemaps/huc6_pnw.geojson` — the 22 HUC6 basins of region 17
@@ -32,7 +32,7 @@ the current HUC4 view lumps them into 1706 Lower Snake.
     Basins).
   - `data/basemaps/huc2_pnw.geojson` — unchanged.
 - `basin_loader.py` gains `load_huc6()` and `load_all_basins()`; the
-  latter returns all 33 basins as rows of `(huc, name, geometry)` with
+  latter returns all 35 basins as rows of `(huc, name, geometry)` with
   `huc` the WBD code string (`'17'`, `'1706'`, `'170602'`).
 - **Accepted losses from dropping the custom splits:**
   - Kootenai / Pend Oreille-Spokane: superseded — HUC6 provides Kootenai
@@ -62,11 +62,11 @@ the current HUC4 view lumps them into 1706 Lower Snake.
 ## UI
 
 - **Snowpack and Trends tabs** keep the current layout (HUC2 chart +
-  all-HUC4 chart, now the standard 10) and gain a **HUC4 drill-down
+  all-HUC4 chart, now the standard 12) and gain a **HUC4 drill-down
   dropdown**: selecting a HUC4 renders a third chart (pair) showing its
   HUC6 children — 1–3 lines each. Default selection: **1706 Lower Snake**
   (children: Lower Snake, Salmon, Clearwater).
-- **Historical tab** basin dropdown lists all 33 basins grouped by level,
+- **Historical tab** basin dropdown lists all 35 basins grouped by level,
   labels carrying the code (e.g. `170602 — Salmon`) so collisions are
   visually unambiguous; option `value` is the `huc` code.
 - **SWANN option removed** from the `dataset-select` radio (single
@@ -112,7 +112,7 @@ Staged so the live app never reads half-recomputed data:
 
 Updated in the same commit as each behavior change (repo rule):
 
-- Basemap integrity: 33 features across the three files, unique `huc`
+- Basemap integrity: 35 features across the three files, unique `huc`
   codes, valid geometries, HUC6 codes all prefixed by an existing HUC4.
 - Loader/schema: `load_all_basins()` shape; volume parquet round-trip with
   `huc` keys; idempotency on `(date, huc)`; name-collision safety (two
