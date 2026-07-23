@@ -155,8 +155,8 @@ def test_make_basin_timeseries_figure_renders_given_frame_verbatim():
     })
     fig = make_basin_timeseries_figure(df, 2024)
     assert len(fig.data) == 1
+    assert fig.data[0].name == 'Columbia River Basin †'   # frame name, not hardcoded
     assert make_basin_timeseries_figure(df.iloc[0:0], 2024).data == ()
-    assert len(fig.data) == 0
 
 
 def test_make_basin_timeseries_figure_xaxis_title(timeseries_df):

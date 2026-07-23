@@ -291,7 +291,7 @@ def make_basin_timeseries_figure(df: pd.DataFrame, wy: int,
         y=basin_df['total_swe_volume_km3'] * _KM3_TO_MAF,
         mode='lines',
         line={'color': _PALETTE[0], 'width': 2},
-        name='Columbia River Basin',
+        name=basin_df['basin'].iloc[0],
     ))
     fig.update_layout(
         title=dict(text=f'Columbia Basin — SWE Volume WY{wy} · {dataset_label}', font={'size': 13}),
