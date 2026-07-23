@@ -79,6 +79,19 @@ def get_layout() -> html.Div:
                          style={'color': '#D55E00', 'fontSize': '0.85rem',
                                 'marginBottom': '1rem'}),
 
+                # Sidebar (not tab-local) so the selection is visible from both
+                # the Snowpack and Trends tabs — it drives both drill-downs.
+                html.Label('HUC6 drill-down', style={'fontWeight': 'bold',
+                           'marginBottom': '0.3rem', 'display': 'block',
+                           'fontSize': '0.9rem'}),
+                dcc.Dropdown(
+                    id='huc4-drill',
+                    options=_huc4_drill_options(),
+                    value='1706',
+                    clearable=False,
+                    style={'fontSize': '0.8rem', 'marginBottom': '1rem'},
+                ),
+
                 html.Div([
                     html.Button(
                         'Download PNGs', id='download-btn', n_clicks=0,
@@ -123,20 +136,6 @@ def get_layout() -> html.Div:
                                           responsive=True, config={'displayModeBar': False}),
                             ], className='chart-pair',
                                style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
-                            html.Div([
-                                html.Label('HUC6 drill-down',
-                                           style={'fontWeight': 'bold',
-                                                  'fontSize': '0.85rem',
-                                                  'marginRight': '0.5rem'}),
-                                dcc.Dropdown(
-                                    id='huc4-drill',
-                                    options=_huc4_drill_options(),
-                                    value='1706',
-                                    clearable=False,
-                                    style={'width': '340px', 'fontSize': '0.85rem'},
-                                ),
-                            ], style={'display': 'flex', 'alignItems': 'center',
-                                      'margin': '0.4rem 0'}),
                             html.Div([
                                 dcc.Graph(id='huc6-graph', style={'flex': '1', 'minWidth': '0'},
                                           responsive=True, config={'displayModeBar': False}),

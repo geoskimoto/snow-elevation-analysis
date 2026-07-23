@@ -252,3 +252,10 @@ def test_trends_drilldown_filters_huc6_children():
     })
     children = callbacks.huc6_children(df, "1706")
     assert set(children["huc"]) == {"170602"}
+
+
+def test_drill_group_label_includes_code():
+    import callbacks
+    assert callbacks.drill_group_label({"1704": "Upper Snake"}, "1704") == \
+        "Upper Snake (1704) HUC6 Basins"
+    assert callbacks.drill_group_label({}, "1704") == "1704 HUC6 Basins"

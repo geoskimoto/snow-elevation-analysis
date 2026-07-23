@@ -403,3 +403,50 @@ def test_climatology_figure_shows_dataset_and_record_label():
         dataset_label="SWANN (4 km)", record_label="WY1982–WY2025 envelope")
     assert "SWANN (4 km)" in fig.layout.title.text
     assert "WY1982" in fig.layout.title.text
+
+
+def _zero_bands():
+    import pandas as pd
+    return pd.DataFrame({
+        "elev_band_m": [1000, 1250, 1500], "mean_swe_mm": [0.0, 0.0, 0.0],
+        "area_km2": [50.0, 60.0, 40.0], "total_swe_volume_km3": [0.0, 0.0, 0.0],
+    })
+
+
+def test_zero_snow_annotation_on_all_factories():
+    from datetime import datetime
+    import charts
+
+    d = datetime(2026, 7, 23)
+    zero = _zero_bands()
+    figs = [
+        charts.make_huc2_figure(zero, d),
+        charts.make_huc4_figure({"Salmon": zero}, d),
+        charts.make_huc2_volume_figure(zero, d),
+        charts.make_huc4_volume_figure({"Salmon": zero}, d),
+    ]
+    for fig in figs:
+        texts = [a.text for a in fig.layout.annotations]
+        assert any("No snow" in t for t in texts), fig.layout.title.text
+
+
+def test_no_annotation_when_snow_present():
+    from datetime import datetime
+    import pandas as pd
+    import charts
+
+    bands = pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [120.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [0.006],
+    })
+    fig = charts.make_huc4_figure({"Salmon": bands}, datetime(2026, 1, 15))
+    assert not any("No snow" in a.text for a in fig.layout.annotations)
+
+
+def test_zero_snow_volume_axis_pinned_at_zero():
+    from datetime import datetime
+    import charts
+
+    fig = charts.make_huc4_volume_figure({"Salmon": _zero_bands()}, datetime(2026, 7, 23))
+    assert fig.layout.xaxis.range is not None
+    assert fig.layout.xaxis.range[0] == 0

@@ -75,6 +75,17 @@ def huc6_children(df, huc4: str):
     return df[(df['huc'].str.startswith(huc4)) & (df['huc'].str.len() == 6)]
 
 
+def drill_group_label(names: dict, huc4: str) -> str:
+    """Drill-down chart title prefix, always carrying the HUC4 code.
+
+    WBD names collide across levels (1704 'Upper Snake' has a child 170402
+    also named 'Upper Snake'), so a name-only title reads as if basins are
+    missing from the chart.
+    """
+    parent = names.get(huc4)
+    return f'{parent} ({huc4}) HUC6 Basins' if parent else f'{huc4} HUC6 Basins'
+
+
 def _figs_to_zip(named_figs: list[tuple[str, go.Figure]]) -> dict:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -348,9 +359,8 @@ def register(app) -> None:
             return _annotated_empty_figure('No HUC6 children for this subregion.'), \
                    _annotated_empty_figure('')
         date_ = datetime.strptime(store_data['date_str'], '%Y-%m-%d')
-        parent = names.get(huc4, huc4)
         ds = datasets.get(store_data.get('dataset', 'snodas'))
-        label = f'{parent} HUC6 Basins'
+        label = drill_group_label(names, huc4)
         return (charts.make_huc4_figure(children, date_, dataset_label=ds['label'],
                                         group_label=label),
                 charts.make_huc4_volume_figure(children, date_, dataset_label=ds['label'],
@@ -371,8 +381,7 @@ def register(app) -> None:
         if children.empty:
             return _annotated_empty_figure('No data yet for this subregion.')
         ds = datasets.get(dataset)
-        parent = df.loc[df['huc'] == huc4, 'basin']
-        parent_name = parent.iloc[0] if len(parent) else huc4
+        names = dict(zip(df['huc'], df['basin']))
         return charts.make_huc4_timeseries_figure(
             children, wy, dataset_label=ds['label'],
-            group_label=f'{parent_name} HUC6 Basins')
+            group_label=drill_group_label(names, huc4))

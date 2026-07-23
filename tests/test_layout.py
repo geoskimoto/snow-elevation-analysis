@@ -100,3 +100,12 @@ def test_dataset_radio_snodas_only_and_hidden():
     assert radio is not None and radio.value == "snodas"
     assert [o["value"] for o in radio.options] == ["snodas"]
     assert radio.style.get("display") == "none"
+
+
+def test_drill_selector_lives_in_sidebar_not_in_tabs():
+    from layout import get_layout
+    layout = get_layout()
+    tabs = _find(layout, "main-tabs")
+    assert tabs is not None
+    assert _find(tabs, "huc4-drill") is None          # not inside any tab
+    assert _find(layout, "huc4-drill") is not None    # but present in the app

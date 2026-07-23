@@ -48,6 +48,22 @@ def _y_range_ft(dfs: list) -> list:
     return [float(all_vals.min()) * _M_TO_FT, float(all_vals.max()) * _M_TO_FT]
 
 
+_NO_SNOW_ANNOTATION = dict(
+    text='No snow on this date — SWE is zero across all elevation bands',
+    x=0.5, y=0.5, xref='paper', yref='paper', showarrow=False,
+    font={'size': 13, 'color': '#888'},
+)
+
+
+def _all_zero_swe(dfs: list) -> bool:
+    """True when every non-empty frame has SWE = 0 in every band (a valid
+    snow-free date, which otherwise renders as a degenerate-looking chart)."""
+    non_empty = [df for df in dfs if df is not None and not df.empty]
+    if not non_empty:
+        return False
+    return all((df['mean_swe_mm'] == 0).all() for df in non_empty)
+
+
 def make_huc2_figure(df: pd.DataFrame, date: datetime,
                      dataset_label: str = _DEFAULT_DATASET_LABEL) -> go.Figure:
     date_label = date.strftime('%b %d, %Y')
@@ -70,6 +86,8 @@ def make_huc2_figure(df: pd.DataFrame, date: datetime,
         showlegend=False,
         margin=_MARGIN_SINGLE,
     )
+    if _all_zero_swe([df]):
+        fig.add_annotation(**_NO_SNOW_ANNOTATION)
     return fig
 
 
@@ -97,6 +115,8 @@ def make_huc4_figure(bands_by_subbasin: dict, date: datetime,
         legend=_LEGEND_BELOW,
         margin=_MARGIN_MULTI,
     )
+    if _all_zero_swe(list(bands_by_subbasin.values())):
+        fig.add_annotation(**_NO_SNOW_ANNOTATION)
     return fig
 
 
@@ -122,6 +142,9 @@ def make_huc2_volume_figure(df: pd.DataFrame, date: datetime,
         showlegend=False,
         margin=_MARGIN_SINGLE,
     )
+    if _all_zero_swe([df]):
+        fig.add_annotation(**_NO_SNOW_ANNOTATION)
+        fig.update_xaxes(range=[0, 1])
     return fig
 
 
@@ -151,6 +174,9 @@ def make_huc4_volume_figure(bands_by_subbasin: dict, date: datetime,
         margin=_MARGIN_MULTI,
         barmode='stack',
     )
+    if _all_zero_swe(list(bands_by_subbasin.values())):
+        fig.add_annotation(**_NO_SNOW_ANNOTATION)
+        fig.update_xaxes(range=[0, 1])
     return fig
 
 
