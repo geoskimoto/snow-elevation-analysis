@@ -12,6 +12,30 @@ def _huc4_drill_options() -> list:
             for r in sorted(g.itertuples(), key=lambda r: r.huc4)]
 
 
+# Section cards — same visual language as the HTML download page's .plot cards.
+_CARD_STYLE = {
+    'background': 'white', 'borderRadius': '6px',
+    'boxShadow': '0 1px 4px rgba(0,0,0,0.08)',
+    'padding': '1rem', 'marginBottom': '1.25rem',
+}
+_CARD_TITLE_STYLE = {'margin': '0', 'fontSize': '0.95rem', 'color': '#333'}
+
+
+def _drill_card_header(title: str, dropdown_id: str) -> html.Div:
+    """Card header row: section title left, that tab's drill dropdown right."""
+    return html.Div([
+        html.H3(title, style=_CARD_TITLE_STYLE),
+        dcc.Dropdown(
+            id=dropdown_id,
+            options=_huc4_drill_options(),
+            value='1706',
+            clearable=False,
+            style={'width': '300px', 'fontSize': '0.85rem'},
+        ),
+    ], style={'display': 'flex', 'justifyContent': 'space-between',
+              'alignItems': 'center', 'marginBottom': '0.75rem'})
+
+
 def get_layout() -> html.Div:
     today = date.today().isoformat()
     return html.Div([
@@ -79,19 +103,6 @@ def get_layout() -> html.Div:
                          style={'color': '#D55E00', 'fontSize': '0.85rem',
                                 'marginBottom': '1rem'}),
 
-                # Sidebar (not tab-local) so the selection is visible from both
-                # the Snowpack and Trends tabs — it drives both drill-downs.
-                html.Label('HUC6 drill-down', style={'fontWeight': 'bold',
-                           'marginBottom': '0.3rem', 'display': 'block',
-                           'fontSize': '0.9rem'}),
-                dcc.Dropdown(
-                    id='huc4-drill',
-                    options=_huc4_drill_options(),
-                    value='1706',
-                    clearable=False,
-                    style={'fontSize': '0.8rem', 'marginBottom': '1rem'},
-                ),
-
                 html.Div([
                     html.Button(
                         'Download PNGs', id='download-btn', n_clicks=0,
@@ -123,26 +134,34 @@ def get_layout() -> html.Div:
                     dcc.Tab(label='Snowpack', value='snowpack', children=[
                         html.Div([
                             html.Div([
-                                dcc.Graph(id='huc2-graph', style={'flex': '1', 'minWidth': '0'},
-                                          responsive=True, config={'displayModeBar': False}),
-                                dcc.Graph(id='huc4-graph', style={'flex': '1', 'minWidth': '0'},
-                                          responsive=True, config={'displayModeBar': False}),
-                            ], className='chart-pair',
-                               style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
+                                html.H3('Basin & Subregions (HUC2 · HUC4)',
+                                        style={**_CARD_TITLE_STYLE,
+                                               'marginBottom': '0.75rem'}),
+                                html.Div([
+                                    dcc.Graph(id='huc2-graph', style={'flex': '1', 'minWidth': '0'},
+                                              responsive=True, config={'displayModeBar': False}),
+                                    dcc.Graph(id='huc4-graph', style={'flex': '1', 'minWidth': '0'},
+                                              responsive=True, config={'displayModeBar': False}),
+                                ], className='chart-pair',
+                                   style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
+                                html.Div([
+                                    dcc.Graph(id='huc2-volume-graph', style={'flex': '1', 'minWidth': '0'},
+                                              responsive=True, config={'displayModeBar': False}),
+                                    dcc.Graph(id='huc4-volume-graph', style={'flex': '1', 'minWidth': '0'},
+                                              responsive=True, config={'displayModeBar': False}),
+                                ], className='chart-pair',
+                                   style={'display': 'flex', 'gap': '1rem'}),
+                            ], style=_CARD_STYLE),
                             html.Div([
-                                dcc.Graph(id='huc2-volume-graph', style={'flex': '1', 'minWidth': '0'},
-                                          responsive=True, config={'displayModeBar': False}),
-                                dcc.Graph(id='huc4-volume-graph', style={'flex': '1', 'minWidth': '0'},
-                                          responsive=True, config={'displayModeBar': False}),
-                            ], className='chart-pair',
-                               style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
-                            html.Div([
-                                dcc.Graph(id='huc6-graph', style={'flex': '1', 'minWidth': '0'},
-                                          responsive=True, config={'displayModeBar': False}),
-                                dcc.Graph(id='huc6-volume-graph', style={'flex': '1', 'minWidth': '0'},
-                                          responsive=True, config={'displayModeBar': False}),
-                            ], className='chart-pair',
-                               style={'display': 'flex', 'gap': '1rem', 'marginBottom': '1rem'}),
+                                _drill_card_header('HUC6 Drill-down', 'snowpack-drill'),
+                                html.Div([
+                                    dcc.Graph(id='huc6-graph', style={'flex': '1', 'minWidth': '0'},
+                                              responsive=True, config={'displayModeBar': False}),
+                                    dcc.Graph(id='huc6-volume-graph', style={'flex': '1', 'minWidth': '0'},
+                                              responsive=True, config={'displayModeBar': False}),
+                                ], className='chart-pair',
+                                   style={'display': 'flex', 'gap': '1rem'}),
+                            ], style=_CARD_STYLE),
                             html.Div([
                                 html.P([
                                     html.Strong('Data: '),
@@ -167,9 +186,12 @@ def get_layout() -> html.Div:
                             dcc.Graph(id='huc4-timeseries-graph', className='timeseries-graph',
                                       style={'height': '45vh'}, responsive=True,
                                       config={'displayModeBar': False}),
-                            dcc.Graph(id='huc6-timeseries-graph', className='timeseries-graph',
-                                      style={'height': '45vh'}, responsive=True,
-                                      config={'displayModeBar': False}),
+                            html.Div([
+                                _drill_card_header('HUC6 Drill-down', 'trends-drill'),
+                                dcc.Graph(id='huc6-timeseries-graph', className='timeseries-graph',
+                                          style={'height': '45vh'}, responsive=True,
+                                          config={'displayModeBar': False}),
+                            ], style={**_CARD_STYLE, 'marginTop': '1rem'}),
                         ], style={'padding': '1rem'}),
                     ]),
                     dcc.Tab(label='Historical', value='historical', children=[

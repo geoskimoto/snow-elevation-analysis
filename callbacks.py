@@ -342,7 +342,7 @@ def register(app) -> None:
         Output('huc6-graph', 'figure'),
         Output('huc6-volume-graph', 'figure'),
         Input('result-store', 'data'),
-        Input('huc4-drill', 'value'),
+        Input('snowpack-drill', 'value'),
     )
     def update_snowpack_drilldown(store_data, huc4):
         if not store_data or 'huc6_bands' not in store_data or not huc4:
@@ -369,7 +369,7 @@ def register(app) -> None:
     @app.callback(
         Output('huc6-timeseries-graph', 'figure'),
         Input('main-tabs', 'value'),
-        Input('huc4-drill', 'value'),
+        Input('trends-drill', 'value'),
         Input('dataset-select', 'value'),
     )
     def update_trends_drilldown(tab_value, huc4, dataset):

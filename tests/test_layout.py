@@ -86,7 +86,7 @@ def _find(component, cid):
 def test_drilldown_selector_and_huc6_graphs_present():
     from layout import get_layout
     layout = get_layout()
-    drill = _find(layout, "huc4-drill")
+    drill = _find(layout, "snowpack-drill")
     assert drill is not None and drill.value == "1706"
     assert len(drill.options) == 12
     assert any("Lower Snake" in o["label"] for o in drill.options)
@@ -102,10 +102,16 @@ def test_dataset_radio_snodas_only_and_hidden():
     assert radio.style.get("display") == "none"
 
 
-def test_drill_selector_lives_in_sidebar_not_in_tabs():
+def test_per_tab_drill_selectors_in_their_tabs():
     from layout import get_layout
     layout = get_layout()
     tabs = _find(layout, "main-tabs")
     assert tabs is not None
-    assert _find(tabs, "huc4-drill") is None          # not inside any tab
-    assert _find(layout, "huc4-drill") is not None    # but present in the app
+    assert _find(layout, "huc4-drill") is None            # shared selector removed
+    for tab_value, cid in (("snowpack", "snowpack-drill"),
+                           ("trends", "trends-drill")):
+        tab = next(t for t in tabs.children if t.value == tab_value)
+        drill = _find(tab, cid)
+        assert drill is not None, cid
+        assert drill.value == "1706"
+        assert len(drill.options) == 12
