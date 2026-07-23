@@ -144,15 +144,18 @@ def test_make_basin_timeseries_figure_empty_df_returns_empty():
     assert len(fig.data) == 0
 
 
-def test_make_basin_timeseries_figure_no_columbia_rows_returns_empty():
+def test_make_basin_timeseries_figure_renders_given_frame_verbatim():
+    """No internal name filter: callers pre-filter by huc, and display names
+    may carry the transboundary dagger ('Columbia River Basin †')."""
     from charts import make_basin_timeseries_figure
     df = pd.DataFrame({
         'date': pd.date_range('2024-10-01', periods=2, freq='W'),
-        'basin': ['Snake River', 'Upper Columbia'],
+        'basin': ['Columbia River Basin †', 'Columbia River Basin †'],
         'total_swe_volume_km3': [0.1, 0.2],
     })
     fig = make_basin_timeseries_figure(df, 2024)
-    assert isinstance(fig, go.Figure)
+    assert len(fig.data) == 1
+    assert make_basin_timeseries_figure(df.iloc[0:0], 2024).data == ()
     assert len(fig.data) == 0
 
 

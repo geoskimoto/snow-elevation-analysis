@@ -280,7 +280,9 @@ def make_climatology_figure(clim_df: pd.DataFrame, current_df: pd.DataFrame,
 
 def make_basin_timeseries_figure(df: pd.DataFrame, wy: int,
                                  dataset_label: str = _DEFAULT_DATASET_LABEL) -> go.Figure:
-    basin_df = df[df['basin'] == 'Columbia River Basin']
+    # Callers pre-filter to the basin row set (huc == '17'); no name filter
+    # here — display names may carry the transboundary dagger.
+    basin_df = df
     if basin_df.empty:
         return go.Figure()
     fig = go.Figure()

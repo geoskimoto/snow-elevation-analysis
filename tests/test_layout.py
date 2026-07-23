@@ -115,3 +115,10 @@ def test_per_tab_drill_selectors_in_their_tabs():
         assert drill is not None, cid
         assert drill.value == "1706"
         assert len(drill.options) == 12
+
+
+def test_drill_options_carry_daggers():
+    from layout import _huc4_drill_options
+    labels = {o["value"]: o["label"] for o in _huc4_drill_options()}
+    assert labels["1701"].endswith("†")
+    assert not labels["1706"].endswith("†")

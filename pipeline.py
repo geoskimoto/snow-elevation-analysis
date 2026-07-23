@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import config
 import datasets
 import timeseries
-from basin_loader import load_all_basins
+from basin_loader import load_all_basins, transboundary_hucs, dagger
 from charts import make_huc2_figure, make_huc4_figure, make_huc2_volume_figure, make_huc4_volume_figure
 from dem_processor import get_aligned_dem
 from elevation_bands import compute_bands
@@ -110,7 +110,8 @@ def run_pipeline(date_str: str, set_progress=None, dataset: str = 'snodas') -> d
 
         _progress(5, 5, 'Rendering figures...')
         huc2_df = bands_by_huc.get('17')
-        huc4_by_name = {names[h]: b for h, b in bands_by_huc.items()
+        tb = transboundary_hucs()
+        huc4_by_name = {dagger(names[h], h, tb): b for h, b in bands_by_huc.items()
                         if len(h) == 4}
         written = plot_hypsometric(
             {'Columbia River Basin': huc2_df, **huc4_by_name}, date, output_dir)

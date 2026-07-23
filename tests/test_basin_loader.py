@@ -60,3 +60,15 @@ def test_load_huc4_raises_if_file_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(basin_loader, 'BASEMAP_DIR', tmp_path)
     with pytest.raises(FileNotFoundError, match="huc4_pnw.geojson"):
         basin_loader.load_huc4()
+
+
+def test_transboundary_hucs_from_states_attribute():
+    from basin_loader import transboundary_hucs
+    tb = transboundary_hucs()
+    assert {"17", "1701", "1702", "1711", "170101", "170102", "170200", "171100"} == tb
+
+
+def test_dagger_helper():
+    from basin_loader import dagger
+    assert dagger("Kootenai", "170101", {"170101"}) == "Kootenai †"
+    assert dagger("Salmon", "170602", {"170101"}) == "Salmon"

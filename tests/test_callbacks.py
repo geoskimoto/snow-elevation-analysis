@@ -259,3 +259,18 @@ def test_drill_group_label_includes_code():
     assert callbacks.drill_group_label({"1704": "Upper Snake"}, "1704") == \
         "Upper Snake (1704) HUC6 Basins"
     assert callbacks.drill_group_label({}, "1704") == "1704 HUC6 Basins"
+
+
+def test_display_frame_daggers_transboundary_names():
+    import pandas as pd
+    import callbacks
+    from basin_loader import transboundary_hucs
+    df = pd.DataFrame({
+        "date": pd.to_datetime(["2026-01-01"] * 2),
+        "huc": ["170101", "170602"],
+        "basin": ["Kootenai", "Salmon"],
+        "total_swe_volume_km3": [1.0, 2.0],
+    })
+    out = callbacks.display_frame(df, transboundary_hucs())
+    assert set(out["basin"]) == {"Kootenai †", "Salmon"}
+    assert set(df["basin"]) == {"Kootenai", "Salmon"}   # original untouched

@@ -46,3 +46,22 @@ def load_all_basins() -> gpd.GeoDataFrame:
     out["huc"] = out["huc"].astype(str)
     out.loc[out["huc"] == "17", "name"] = _HUC2_DISPLAY_NAME
     return out.sort_values("huc").reset_index(drop=True)
+
+
+def transboundary_hucs() -> set[str]:
+    """Huc codes whose WBD ``states`` attribute includes Canada ('CN').
+
+    Data-driven from the committed geojsons; used only for display-layer
+    daggers — never stored in parquets.
+    """
+    out = set()
+    for gdf, code_col in ((load_huc2(), "huc2"), (load_huc4(), "huc4"),
+                          (load_huc6(), "huc6")):
+        mask = gdf["states"].fillna("").str.contains("CN")
+        out.update(gdf.loc[mask, code_col].astype(str))
+    return out
+
+
+def dagger(name: str, huc: str, tb: set) -> str:
+    """Append the transboundary dagger to a display name when flagged."""
+    return f"{name} †" if huc in tb else name

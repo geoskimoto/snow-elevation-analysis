@@ -6,9 +6,10 @@ import datasets
 
 
 def _huc4_drill_options() -> list:
-    from basin_loader import load_huc4
+    from basin_loader import load_huc4, transboundary_hucs, dagger
     g = load_huc4()
-    return [{'label': f"{r.huc4} — {r.name}", 'value': r.huc4}
+    tb = transboundary_hucs()
+    return [{'label': f"{r.huc4} — {dagger(r.name, r.huc4, tb)}", 'value': r.huc4}
             for r in sorted(g.itertuples(), key=lambda r: r.huc4)]
 
 

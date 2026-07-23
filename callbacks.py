@@ -14,6 +14,11 @@ import config
 import datasets
 import pipeline
 import timeseries
+from basin_loader import transboundary_hucs, dagger
+
+# Computed once at import: display-layer transboundary flags (see spec
+# 2026-07-23-swann-reenable-huc6-design.md — daggers never enter parquets).
+_TB = transboundary_hucs()
 
 
 def _annotated_empty_figure(message: str) -> go.Figure:
@@ -73,6 +78,13 @@ def build_historical_view(df, wy: int, huc: str | None,
 def huc6_children(df, huc4: str):
     """Rows for the HUC6 children of a HUC4 (huc startswith + length 6)."""
     return df[(df['huc'].str.startswith(huc4)) & (df['huc'].str.len() == 6)]
+
+
+def display_frame(df, tb):
+    """Copy of a volume frame with transboundary display names daggered."""
+    out = df.copy()
+    out['basin'] = [dagger(n, h, tb) for n, h in zip(out['basin'], out['huc'])]
+    return out
 
 
 def drill_group_label(names: dict, huc4: str) -> str:
@@ -296,9 +308,11 @@ def register(app) -> None:
 
         return (
             charts.make_basin_timeseries_figure(
-                df[df['huc'] == '17'], wy, dataset_label=ds['label']),
+                display_frame(df[df['huc'] == '17'], _TB), wy,
+                dataset_label=ds['label']),
             charts.make_huc4_timeseries_figure(
-                df[df['huc'].str.len() == 4], wy, dataset_label=ds['label']),
+                display_frame(df[df['huc'].str.len() == 4], _TB), wy,
+                dataset_label=ds['label']),
         )
 
     @app.callback(
@@ -316,8 +330,8 @@ def register(app) -> None:
                 .sort_values('huc').itertuples())
         options = []
         for r in hucs:
-            label = ('Columbia River Basin' if r.huc == '17'
-                     else f'{r.huc} — {r.basin}')
+            name = dagger(r.basin, r.huc, _TB)
+            label = (name if r.huc == '17' else f'{r.huc} — {name}')
             options.append({'label': label, 'value': r.huc})
         return options
 
@@ -351,7 +365,7 @@ def register(app) -> None:
         import pandas as pd
         names = store_data.get('names', {})
         children = {
-            names.get(h, h): pd.DataFrame(rows)
+            dagger(names.get(h, h), h, _TB): pd.DataFrame(rows)
             for h, rows in store_data['huc6_bands'].items()
             if h.startswith(huc4)
         }
@@ -360,7 +374,8 @@ def register(app) -> None:
                    _annotated_empty_figure('')
         date_ = datetime.strptime(store_data['date_str'], '%Y-%m-%d')
         ds = datasets.get(store_data.get('dataset', 'snodas'))
-        label = drill_group_label(names, huc4)
+        label = drill_group_label(
+            {huc4: dagger(names.get(huc4, huc4), huc4, _TB)}, huc4)
         return (charts.make_huc4_figure(children, date_, dataset_label=ds['label'],
                                         group_label=label),
                 charts.make_huc4_volume_figure(children, date_, dataset_label=ds['label'],
@@ -381,7 +396,8 @@ def register(app) -> None:
         if children.empty:
             return _annotated_empty_figure('No data yet for this subregion.')
         ds = datasets.get(dataset)
-        names = dict(zip(df['huc'], df['basin']))
+        names = {h: dagger(n, h, _TB)
+                 for h, n in zip(df['huc'], df['basin'])}
         return charts.make_huc4_timeseries_figure(
-            children, wy, dataset_label=ds['label'],
+            display_frame(children, _TB), wy, dataset_label=ds['label'],
             group_label=drill_group_label(names, huc4))

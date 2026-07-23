@@ -25,7 +25,9 @@ DATASETS = {
             "SNOTEL/COOP ground stations with meteorological model forcing. "
             "Limitations: Station network thins above ~7,000 ft, leading to "
             "underestimation of deep mountain snowpack (published bias: 20-40% low "
-            "in high-elevation basins). Glacier pixels are excluded."
+            "in high-elevation basins). Glacier pixels are excluded. "
+            "† transboundary basins include southern-BC coverage (the NOHRSC "
+            "domain extends past the border)."
         ),
     },
     "swann": {
@@ -39,7 +41,9 @@ DATASETS = {
             "Interpolates SNOTEL and COOP observations using PRISM "
             "temperature/precipitation gradients. Limitations: 4 km pixels span "
             "wide elevation ranges in steep terrain, so per-elevation-band SWE is "
-            "smeared and hypsometric curves are coarser than SNODAS (~1 km)."
+            "smeared and hypsometric curves are coarser than SNODAS (~1 km). "
+            "† transboundary basins are US-portion-only — totals exclude "
+            "Canadian area and are not directly comparable to SNODAS there."
         ),
     },
 }
