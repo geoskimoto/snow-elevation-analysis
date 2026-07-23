@@ -10,6 +10,16 @@ any root-run operation that creates or modifies files here (including inside
 Root-owned files break geoskimoto's git operations, venv installs, and cron
 jobs.
 
+## data/cache holds LIVE runtime state — never bulk-delete while the app runs
+
+`data/cache/diskcache/` is the sqlite queue for Dash background callbacks
+(Run Analysis). Deleting it under a running gunicorn leaves workers with
+dead handles: every analysis silently fails and the UI keeps showing the
+last successful result (learned the hard way 2026-07-23). If `data/cache`
+is ever wiped: `git restore data/cache/` brings back committed parquets and
+DEMs, then `sudo systemctl restart snow-elevation-plot` recreates the
+diskcache. Band caches and rasters are regenerable on demand.
+
 Dash app that plots SNODAS snow-water-equivalent by elevation band for
 Columbia Basin HUC2/HUC4 basins. Data layer in `snodas_fetcher.py`,
 `pipeline.py`, `timeseries.py`; charts in `charts.py`; Dash callbacks in
