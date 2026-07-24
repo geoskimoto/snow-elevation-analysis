@@ -57,9 +57,8 @@ def test_dataset_selector_present_with_snodas_default():
     radio = find(layout, "dataset-select")
     assert radio is not None
     assert radio.value == "snodas"
-    # SWANN dormant (2026-07-22 HUC6 redesign): options are SNODAS-only while
-    # the radio is hidden — see test_dataset_radio_snodas_only_and_hidden.
-    assert {o["value"] for o in radio.options} == {"snodas"}
+    # SWANN re-enabled 2026-07-23 at 35-basin granularity.
+    assert {o["value"] for o in radio.options} == {"snodas", "swann"}
 
     picker = find(layout, "date-picker")
     assert picker.min_date_allowed is not None
@@ -94,12 +93,12 @@ def test_drilldown_selector_and_huc6_graphs_present():
         assert _find(layout, cid) is not None, cid
 
 
-def test_dataset_radio_snodas_only_and_hidden():
+def test_dataset_radio_two_options_visible():
     from layout import get_layout
     radio = _find(get_layout(), "dataset-select")
     assert radio is not None and radio.value == "snodas"
-    assert [o["value"] for o in radio.options] == ["snodas"]
-    assert radio.style.get("display") == "none"
+    assert [o["value"] for o in radio.options] == ["snodas", "swann"]
+    assert radio.style.get("display") != "none"
 
 
 def test_per_tab_drill_selectors_in_their_tabs():

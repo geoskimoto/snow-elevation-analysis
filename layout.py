@@ -51,14 +51,14 @@ def get_layout() -> html.Div:
             dcc.RadioItems(
                 id='dataset-select',
                 options=[
-                    # SWANN dormant (2026-07-22 HUC6 redesign): to re-enable, add back
-                    #   {'label': datasets.get('swann')['label'], 'value': 'swann'},
-                    # and remove display:none. All dataset= machinery remains wired.
+                    # SWANN re-enabled 2026-07-23 at 35-basin granularity
+                    # (dormant 2026-07-22 → 23 during the HUC6 redesign).
                     {'label': datasets.get('snodas')['label'], 'value': 'snodas'},
+                    {'label': datasets.get('swann')['label'], 'value': 'swann'},
                 ],
                 value='snodas',
                 inline=True,
-                style={'fontSize': '0.85rem', 'color': '#333', 'display': 'none'},
+                style={'fontSize': '0.85rem', 'color': '#333'},
                 inputStyle={'marginRight': '0.3rem', 'marginLeft': '0.9rem'},
             ),
         ], style={
