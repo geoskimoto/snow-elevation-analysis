@@ -274,3 +274,22 @@ def test_display_frame_daggers_transboundary_names():
     out = callbacks.display_frame(df, transboundary_hucs())
     assert set(out["basin"]) == {"Kootenai †", "Salmon"}
     assert set(df["basin"]) == {"Kootenai", "Salmon"}   # original untouched
+
+
+def test_historical_title_daggers_transboundary_basin(tmp_path):
+    import pandas as pd
+    from datetime import datetime
+    import callbacks, climatology
+    from timeseries import append_volumes
+
+    band = pd.DataFrame({
+        "elev_band_m": [1000], "mean_swe_mm": [100.0],
+        "area_km2": [50.0], "total_swe_volume_km3": [1.0],
+    })
+    for yr in (2004, 2005, 2006, 2007):
+        for day in (10, 11, 12):
+            append_volumes(datetime(yr, 1, day), {"170101": band},
+                           {"170101": "Kootenai"}, tmp_path)
+    df = climatology.load_all_water_years(tmp_path)
+    fig, cap = callbacks.build_historical_view(df, 2026, "170101")
+    assert "Kootenai †" in fig.layout.title.text

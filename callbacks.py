@@ -44,7 +44,7 @@ def build_historical_view(df, wy: int, huc: str | None,
     """
     huc = huc or '17'
     ds = datasets.get(dataset)
-    label = climatology.display_name(df, huc) or huc
+    label = dagger(climatology.display_name(df, huc) or huc, huc, _TB)
     if df.empty:
         if dataset == 'snodas':
             msg = 'No data yet — run populate_timeseries.py to build the record.'
